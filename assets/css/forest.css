@@ -1,0 +1,24 @@
+body {
+  font-family: 'Arial', sans-serif;
+}
+
+canvas {
+    background-color: black;
+    display: block;
+    margin: 0 auto;
+    color: white;
+    font-family: monospace;
+}
+
+/* surrounding game board */
+
+.section {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  flex-flow: column;
+  justify-content: center;
+  align-items: center;
+  gap: 20px;
+  background-color: #555;
+}
