@@ -1,5 +1,7 @@
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
+const creditsCanvas = document.getElementById("creditsCanvas");
+const creditsCtx = creditsCanvas.getContext("2d");
 
 const game = {
     settings: {
@@ -12,6 +14,9 @@ const game = {
         mountainBlobMaxSize: 28,
         riverWidth: 7,
         orcScore: 10,
+    },
+    credits: {
+        visible: false,
     },
     score: 0,
     turns: 0,
@@ -40,6 +45,10 @@ const game = {
 
 canvas.width = game.settings.gridWidth * game.settings.tileSize;
 canvas.height = game.settings.gridHeight * game.settings.tileSize;
+// Update canvas dimensions to match the game canvas
+creditsCanvas.width = canvas.width;
+creditsCanvas.height = canvas.height;
+
 game.player = game.getInitialPlayerPosition();
 
  // Default to grass for all tiles
@@ -64,6 +73,28 @@ const sounds = {
     playerCollision: new Audio('assets/sounds/player-collision.m4a'),
     playerDrown: new Audio('assets/sounds/player-drown.m4a'),
 };
+
+function calculateGridSize() {
+    const { tileSize } = game.settings;
+
+    // Get viewport dimensions
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+
+    // Calculate the number of tiles that fit in the viewport (rounding down)
+    const gridWidth = Math.floor(viewportWidth / tileSize);
+    const gridHeight = Math.floor(viewportHeight / tileSize);
+
+    // Update canvas dimensions
+    canvas.width = gridWidth * tileSize;
+    canvas.height = gridHeight * tileSize;
+
+    // Update game settings
+    game.settings.gridWidth = gridWidth;
+    game.settings.gridHeight = gridHeight;
+
+    console.log(`Grid calculated: ${gridWidth} x ${gridHeight} tiles`);
+}
 
 
 function setupButtonListener() {
@@ -108,9 +139,19 @@ function setupKeyboardControls() {
             movePlayer(move.x, move.y);
         }
     });
+
+    canvas.addEventListener("keydown", (event) => {
+        if (event.key === "/" || event.key === "?") {
+            toggleCredits();
+        }
+    });
 }
 
 function init() {
+    
+    // Calculate grid dimensions based on viewport
+    // calculateGridSize();
+    
     // Setup button click listener
     setupButtonListener();
 
@@ -132,6 +173,10 @@ function togglePause() {
 
 function eraseBoard() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+}
+
+function eraseCredits() {
+    creditsCtx.clearRect(0, 0, creditsCanvas.width, creditsCanvas.height);
 }
 
 function clearTile(x, y) {
@@ -588,6 +633,8 @@ function restartGame() {
     game.paused = false; // Not yet in use
     game.currentLevel = 1; // Not yet in use
 
+    calculateGridSize();
+
     // Generate the game board and entities
     generateGameBoard(); // Populate the gameBoard array with static entities
     generateEntities();  // Populate dynamic entities like orcs and player
@@ -600,6 +647,68 @@ function restartGame() {
 
     // Redraw the entire game
     drawGame();
+}
+
+function drawCredits() {
+    const { gridWidth, gridHeight, tileSize } = game.settings;
+
+    // Calculate dimensions
+    const overlayWidth = Math.min(Math.ceil(gridWidth * 0.8), gridWidth) * tileSize;
+    const overlayHeight = Math.min(Math.ceil(gridHeight * 0.8), gridHeight) * tileSize;
+
+    const overlayX = (canvas.width - overlayWidth) / 2;
+    const overlayY = (canvas.height - overlayHeight) / 2;
+
+    // Draw black background
+    creditsCtx.fillStyle = "black";
+    creditsCtx.fillRect(overlayX, overlayY, overlayWidth, overlayHeight);
+
+    // Draw border of asterisks
+    creditsCtx.fillStyle = "white";
+    creditsCtx.font = `${tileSize}px monospace`;
+    creditsCtx.textAlign = "center";
+    creditsCtx.textBaseline = "middle";
+
+    for (let x = 0; x < overlayWidth / tileSize; x++) {
+        creditsCtx.fillText("*", overlayX + x * tileSize + tileSize / 2, overlayY + tileSize / 2);
+        creditsCtx.fillText("*", overlayX + x * tileSize + tileSize / 2, overlayY + overlayHeight - tileSize / 2);
+    }
+
+    for (let y = 0; y < overlayHeight / tileSize; y++) {
+        creditsCtx.fillText("*", overlayX + tileSize / 2, overlayY + y * tileSize + tileSize / 2);
+        creditsCtx.fillText("*", overlayX + overlayWidth - tileSize / 2, overlayY + y * tileSize + tileSize / 2);
+    }
+
+    // Draw credits text
+    const textX = overlayX + overlayWidth / 2;
+    let textY = overlayY + tileSize * 2;
+
+    creditsCtx.fillStyle = "white";
+    creditsCtx.textAlign = "center";
+
+    // Draw "FOREST" (slightly smaller than the title screen)
+    creditsCtx.font = `${tileSize * 2}px monospace`;
+    creditsCtx.fillText("FOREST", textX, textY);
+    textY += tileSize * 2;
+
+    // Draw "Credits" in bold
+    creditsCtx.font = `bold ${tileSize * 1.5}px monospace`;
+    creditsCtx.fillText("Credits", textX, textY);
+    textY += tileSize * 2;
+
+    // Draw "M. Cummings • R. Butz"
+    creditsCtx.font = `${tileSize}px monospace`;
+    creditsCtx.fillText("M. Cummings • R. Butz", textX, textY);
+    textY += tileSize * 2;
+
+    // Draw "== SAME TEAM =="
+    creditsCtx.font = `bold ${tileSize * 1.25}px monospace`;
+    creditsCtx.fillText("== SAME TEAM ==", textX, textY);
+    textY += tileSize * 2;
+
+    // Draw "Cooperative Game Cooperative"
+    creditsCtx.font = `${tileSize}px monospace`;
+    creditsCtx.fillText("Cooperative Game Cooperative", textX, textY);
 }
 
 // START AND END SCREENS
@@ -683,6 +792,20 @@ function displayGameOver(reason, result = 0) {
     const buttonY = canvas.height / 2 + ui.buttonOffset;
 
     drawButton(ctx, "Play Again", buttonX, buttonY, buttonWidth, buttonHeight);
+}
+
+function toggleCredits() {
+    const { gridWidth, gridHeight, tileSize } = game.settings;
+
+    // Toggle visibility
+    game.credits.visible = !game.credits.visible;
+    creditsCanvas.style.display = game.credits.visible ? "block" : "none";
+
+    if (game.credits.visible) {
+        drawCredits();
+    } else {
+        eraseCredits();
+    }
 }
 
 window.onload = init;

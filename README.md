@@ -7,3 +7,12 @@ This game was made to show my kid how games on the iPad, browser etc. are *devel
 See https://forest.robbutz.com for the latest version of the game.
 
 **Forest** is based on my memory of someone's turn-based survival game project, played on the Veronica VAX Mainframe project at Okanagan College, 1979. (Would love to get more information about the original game). I've made minor enhancements (color, etc.) 
+
+[![CC BY 4.0](https://licensebuttons.net/l/by/4.0/88x31.png)](https://creativecommons.org/licenses/by/4.0/)
+
+**License**
+Licensed under the Creative Commons Attribution 4.0 International License (CC-BY 4.0) © 2024 Same Team Cooperative Game Cooperative // M. Cummings & R. Butz
+
+You are free to use, share, and modify this game, provided you give appropriate credit. Assets such as sounds, fonts, graphics, and other third-party elements are excluded unless otherwise specified. These assets may have their own licenses or usage terms. 
+
+Visit [https://creativecommons.org/licenses/by/4.0/](https://creativecommons.org/licenses/by/4.0/) to learn more.
