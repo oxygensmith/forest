@@ -1,33 +1,51 @@
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 
-const tileSize = 18; // Size of each grid square
-const gridWidth = 80; // Number of columns
-const gridHeight = 40; // Number of rows
-const gameplayGridHeight = gridHeight - 1; // Reserve the first row for game details
-let score = 0;
+const game = {
+    settings: {
+        tileSize: 18,
+        gridWidth: 80,
+        gridHeight: 40,
+        numberOfTrees: 450,
+        numberOfOrcs: 20,
+        mountainBlobCount: 10,
+        mountainBlobMaxSize: 28,
+        riverWidth: 7,
+        orcScore: 10,
+    },
+    score: 0,
+    turns: 0,
+    gameOver: false,
+    paused: false,
+    currentLevel: 1,
+    trees: [],
+    mountains: [],
+    orcs: [],
+    gameBoard: [],
+    getInitialPlayerPosition() {
+        return {
+            x: Math.floor(this.settings.gridWidth / 2),
+            y: Math.floor(this.settings.gridHeight / 2),
+        };
+    },
+    player: {},
+    ui: { // Renamed for brevity
+        titleOffset: -120,
+        textOffset: -80,
+        buttonOffset: 40,
+        buttonCoords: null, // Button coordinates start as null
+    },
+    debug: false,
+};
 
-canvas.width = gridWidth * tileSize;
-canvas.height = gridHeight * tileSize;
+canvas.width = game.settings.gridWidth * game.settings.tileSize;
+canvas.height = game.settings.gridHeight * game.settings.tileSize;
+game.player = game.getInitialPlayerPosition();
 
-let player = { x: Math.floor(gridWidth / 2), y: Math.floor(gridHeight / 2) };
-
-let gameBoard = Array.from({ length: gridHeight }, () =>
-    Array.from({ length: gridWidth }, () => 'grass') // Default to grass
+ // Default to grass for all tiles
+game.gameBoard = Array.from({ length: game.settings.gridHeight }, () =>
+    Array.from({ length: game.settings.gridWidth }, () => 'grass')
 );
-
-let orcs = []; // Array of orc objects, e.g., { x: 5, y: 8 }
-
-let trees = [];
-let mountains = [];
-let gameOver = false;
-const numberOfTrees = 450;
-const numberOfOrcs = 20;
-const numberOfMountains = 10;
-const mountainMaxSize = 28;
-const riverWidth = 7;
-
-const orcScore = 10;
 
 const entityTypes = {
     grass: { char: '~', color: '#003300', passable: true },
@@ -47,19 +65,16 @@ const sounds = {
     playerDrown: new Audio('assets/sounds/player-drown.m4a'),
 };
 
-// things for the start/end screens
-
-let buttonCoords = null;
 
 function setupButtonListener() {
     canvas.addEventListener("click", (event) => {
-        if (!buttonCoords) return; // when no button currently displayed
+        if (!game.ui.buttonCoords) return; // when no button currently displayed
 
         const rect = canvas.getBoundingClientRect();
         const mouseX = event.clientX - rect.left;
         const mouseY = event.clientY - rect.top;
 
-        const { x, y, width, height } = buttonCoords;
+        const { x, y, width, height } = game.ui.buttonCoords;
 
         // Check if the click is within the button's bounds
         if (
@@ -69,7 +84,7 @@ function setupButtonListener() {
             mouseY <= y + height
         ) {
             restartGame(); // Start or restart the game
-            buttonCoords = null; // Clear button coordinates after click
+            game.ui.buttonCoords = null; // Clear button coordinates after click
         }
     });
 }
@@ -95,83 +110,65 @@ function setupKeyboardControls() {
     });
 }
 
-
 function init() {
-        // Setup button click listener
-        setupButtonListener();
-    
-        // Setup keyboard controls
-        setupKeyboardControls();
-    
-        // Display the About screen
-        displayAbout();
+    // Setup button click listener
+    setupButtonListener();
 
-        // Focus the canvas to enable keyboard input
-        canvas.focus();
+    // Setup keyboard controls
+    setupKeyboardControls();
+
+    // Display the About screen
+    displayAbout();
+
+    // Focus the canvas to enable keyboard input
+    canvas.focus();
 }
 
+/* main HELPER functions */
 
-function drawText(char, x, y, color) {
-    ctx.fillStyle = color;
-    ctx.font = `${tileSize}px monospace`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(char, x * tileSize + tileSize / 2, y * tileSize + tileSize / 2);
+function togglePause() {
+    game.paused = !game.paused;
+}
+
+function eraseBoard() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
 }
 
 function clearTile(x, y) {
-    ctx.fillStyle = "black"; // Black background to obscure the grass
+    const tileSize = game.settings.tileSize;
+    ctx.fillStyle = "black"; // Black background to obscure the surface stood upon
     ctx.fillRect(x * tileSize, y * tileSize, tileSize, tileSize);
 }
 
-function drawEntity(entityKey, x, y) {
-    const entity = entityTypes[entityKey]; // Lookup by type (e.g., 'grass', 'tree')
-    if (entity) {
-        // console.log(`Draw ${entityKey} at (${x}, ${y})`);
-        ctx.fillStyle = entity.color;
-        ctx.font = `${tileSize}px monospace`;
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText(entity.char, x * tileSize + tileSize / 2, y * tileSize + tileSize / 2);
-    } else {
-        console.log(`No entity found for key: ${entityKey} at (${x}, ${y})`);
-    }
-}
-
-
-function drawDynamicEntities() {
-    // Clear and draw the player
-    clearTile(player.x, player.y); // Clear background under the player
-    drawEntity('player', player.x, player.y);
-
-    // Clear and draw each orc
-    orcs.forEach(orc => {
-        clearTile(orc.x, orc.y); // Clear background under the orc
-        drawEntity('orc', orc.x, orc.y);
-    });
-}
+/* GENERATE functions */
 
 function addTreesToBoard(treeCount) {
     for (let i = 0; i < treeCount; i++) {
         let x, y;
         do {
-            x = Math.floor(Math.random() * gridWidth);
-            y = Math.floor(Math.random() * gridHeight);
-        } while (gameBoard[y][x] !== 'grass'); // Only place on grass
-        gameBoard[y][x] = 'tree'; // Place a tree
+            x = Math.floor(Math.random() * game.settings.gridWidth);
+            y = Math.floor(Math.random() * game.settings.gridHeight);
+        } while (game.gameBoard[y][x] !== 'grass'); // Only place on grass
+
+        // Place a tree on the board
+        game.gameBoard[y][x] = 'tree';
+
+        // Optionally track the tree coordinates in game.trees
+        game.trees.push({ x, y });
     }
 }
 
-// new function to generate the board
 function generateGameBoard() {
-    // Initialize the board with grass
-    for (let y = 1; y < gridHeight; y++) {
+    const { gridWidth, gridHeight, numberOfTrees, numberOfMountains, mountainMaxSize, riverWidth } = game.settings;
+    const gameplayGridHeight = gridHeight - 1; // Reserve the first row for game details
+
+    for (let y = 1; y <= gameplayGridHeight; y++) {
         for (let x = 0; x < gridWidth; x++) {
-            // Check if the current tile is on the border
-            if (x === 0 || x === gridWidth - 1 || y === 1 || y === gridHeight - 1) {
-                gameBoard[y][x] = 'border'; // Place a border
+            // Place border on the edges
+            if (x === 0 || x === gridWidth - 1 || y === 1 || y === gameplayGridHeight) {
+                game.gameBoard[y][x] = 'border';
             } else {
-                gameBoard[y][x] = 'grass'; // Place grass
+                game.gameBoard[y][x] = 'grass';
             }
         }
     }
@@ -183,37 +180,26 @@ function generateGameBoard() {
 }
 
 function generateEntities() {
-    // Reset dynamic entities
-    orcs = [];
-    player = { x: Math.floor(gridWidth / 2), y: Math.floor(gridHeight / 2) }; // Center player
+    const { gridWidth, gridHeight, numberOfOrcs } = game.settings;
+    const gameplayGridHeight = gridHeight - 1; // Exclude the UI row
 
-    // Generate orcs
+    game.orcs = []; // Reset the orcs array
+    game.player = game.getInitialPlayerPosition(); // Reset player position
+
     for (let i = 0; i < numberOfOrcs; i++) {
         let x, y;
         do {
-            x = Math.floor(Math.random() * gridWidth);
-            y = Math.floor(Math.random() * gridHeight);
-        } while (gameBoard[y][x] !== 'grass'); // Ensure orcs spawn on grass
-        orcs.push({ x, y });
-    }
-}
+            x = Math.floor(Math.random() * (gridWidth - 2)) + 1; // Avoid left/right borders
+            y = Math.floor(Math.random() * (gameplayGridHeight - 1)) + 2; // Avoid top/bottom borders
+        } while (game.gameBoard[y][x] !== 'grass'); // Ensure orcs spawn on grass
 
-function eraseBoard() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-}
-
-function drawGameBoard() {
-    for (let y = 1; y < gridHeight; y++) {
-        for (let x = 0; x < gridWidth; x++) {
-            const entityKey = gameBoard[y][x];
-            if (entityKey) {
-                drawEntity(entityKey, x, y, entityKey.color);
-            }
-        }
+        game.orcs.push({ x, y }); // Add orc to the array
     }
 }
 
 function generateRiver(riverWidth) {
+    const { gridWidth, gridHeight } = game.settings;
+    
     // Randomly choose a starting edge: top, bottom, left, or right
     const edges = ['top', 'bottom', 'left', 'right'];
     const startEdge = edges[Math.floor(Math.random() * edges.length)];
@@ -245,8 +231,8 @@ function generateRiver(riverWidth) {
             const riverX = currentX + (startEdge === 'top' || startEdge === 'bottom' ? i : 0);
             const riverY = currentY + (startEdge === 'left' || startEdge === 'right' ? i : 0);
 
-            if (riverX >= 0 && riverX < gridWidth && riverY >= 0 && riverY < gridHeight && gameBoard[riverY][riverX] === 'grass') {
-                gameBoard[riverY][riverX] = 'river'; // Mark as river
+            if (riverX >= 0 && riverX < gridWidth && riverY >= 0 && riverY < gridHeight && game.gameBoard[riverY][riverX] === 'grass') {
+                game.gameBoard[riverY][riverX] = 'river'; // Mark as river
             }
         }
 
@@ -265,11 +251,15 @@ function generateRiver(riverWidth) {
         }
     }
 
-    console.log(`River generated starting at (${startX}, ${startY}) from ${startEdge}.`);
+    if (game.debug) {
+        console.log(`River generated starting at (${startX}, ${startY}) from ${startEdge}.`);
+    }
+
 }
 
 function generateMountainBlobs(numBlobs, maxBlobSize) {
-    mountains = []; // Clear existing mountain data
+    const { gridWidth, gridHeight } = game.settings;
+    game.mountains = []; // Reset mountains array
 
     for (let i = 0; i < numBlobs; i++) {
         // Choose a random seed point for the blob
@@ -278,12 +268,12 @@ function generateMountainBlobs(numBlobs, maxBlobSize) {
 
         if (maxBlobSize === 1) {
             // Place a single mountain tile
-            if (gameBoard[seedY][seedX] === 'grass') {
-                gameBoard[seedY][seedX] = 'mountain';
-                mountains.push({ x: seedX, y: seedY });
+            if (game.gameBoard[seedY][seedX] === 'grass') {
+                game.gameBoard[seedY][seedX] = 'mountain';
+                game.mountains.push({ x: seedX, y: seedY });
             }
         } else {
-            // create a set to store blob tiles
+            // Create a set to store blob tiles
             const blobTiles = new Set();
             blobTiles.add(`${seedX},${seedY}`); // Add seed point to the blob
 
@@ -305,27 +295,33 @@ function generateMountainBlobs(numBlobs, maxBlobSize) {
                 const newX = x + direction.dx;
                 const newY = y + direction.dy;
 
-                // Ensure the new tile is within bounds and not already part of the blob
+                // Ensure the new tile is within bounds, grass, and not already in the blob
                 if (
                     newX > 0 &&
                     newX < gridWidth - 1 &&
                     newY > 0 &&
                     newY < gridHeight - 1 &&
+                    game.gameBoard[newY][newX] === 'grass' && // Only place on grass
                     !blobTiles.has(`${newX},${newY}`)
                 ) {
                     blobTiles.add(`${newX},${newY}`);
                     expansionCount++;
                 }
-
-                // Add blob tiles to the game board
-                blobTiles.forEach(tile => {
-                    const [x, y] = tile.split(',').map(Number);
-                    gameBoard[y][x] = 'mountain'; // Add mountain to gameBoard
-                });
             }
+
+            // Add blob tiles to the game board and mountains array
+            blobTiles.forEach(tile => {
+                const [x, y] = tile.split(',').map(Number);
+                game.gameBoard[y][x] = 'mountain'; // Add mountain to gameBoard
+                game.mountains.push({ x, y }); // Track mountain in game.mountains
+            });
         }
-    }    
-    console.log("Generated mountain blobs:", mountains);
+    }
+
+    if (game.debug) {
+        console.log("Generated mountain blobs:", game.mountains);
+    }
+    
 }
 
 function collisionEffect(x, y, callback) {
@@ -353,78 +349,49 @@ function collisionEffect(x, y, callback) {
     }, intervalDuration);
 }
 
-function drawPermanentD(x, y) {
-    clearTile(x, y); // Clear the tile with a black background
-    drawEntity('dead', x, y); // Use the correct entity key
-}
-
-function drawGameDetails() {
-    // Clear the first row of the grid
-    ctx.fillStyle = "black";
-    ctx.fillRect(0, 0, canvas.width, tileSize);
-
-    // Draw "Orcs left:" and "Score:"
-    ctx.fillStyle = "white";
-    ctx.font = "16px monospace";
-    ctx.textAlign = "left";
-    ctx.textBaseline = "middle";
-
-    // Display the number of orcs left
-    ctx.fillText(`Orcs left: ${orcs.length}`, 10, tileSize / 2);
-
-    // Display the score
-    ctx.fillText(`Score: ${score}`, canvas.width - 150, tileSize / 2);
-}
+/* MOVE functions */
 
 function movePlayer(dx, dy) {
-    if (gameOver) return;
+    const { gridWidth, gridHeight } = game.settings;
+    const player = game.player;
 
+    // Prevent movement if the game is over
+    if (game.gameOver) return;
+
+    // Calculate new player position, clamping within bounds
     const newX = Math.max(0, Math.min(gridWidth - 1, player.x + dx));
-    const newY = Math.max(1, Math.min(gridHeight - 1, player.y + dy)); // Start at row 1 (skip game details row)
+    const newY = Math.max(1, Math.min(gridHeight - 1, player.y + dy)); // Row 0 reserved for game details
 
-    // Check collisions with static entities (gameBoard)
-    const staticEntityKey = gameBoard[newY][newX];
+    // Check collision with static entities (gameBoard)
+    const staticEntityKey = game.gameBoard[newY][newX];
     const staticEntity = entityTypes[staticEntityKey];
 
     if (staticEntity) {
-        console.log(`Static entity detected: ${staticEntityKey}`, staticEntity);
+        if (game.debug) {
+            console.log(`Static entity detected: ${staticEntityKey}`, staticEntity);
+        }
+
+        // Handle lethal static entities
         if (staticEntity.kills) {
-            let deathReason = `You collided with ${staticEntityKey}!`;
-            let deathSound = sounds.playerCollision;
-            if (staticEntityKey === 'river') {
-                deathReason = `You drowned in the river!`;
-                deathSound = sounds.playerDrown;
-            }
-
-            // Erase the player visually from the board
-            clearTile(player.x, player.y);
-
-            collisionEffect(newX, newY, () => {
-                deathSound.play();
-                displayGameOver(deathReason, 0);
-                gameOver = true;
-            });
+            handlePlayerDeath(player, newX, newY, staticEntityKey);
             return; // Stop further movement
         }
 
+        // Handle impassable static entities
         if (!staticEntity.passable) {
             sounds.move.play(); // Play bump sound
             return; // Block movement
         }
     }
 
-    // Check collisions with dynamic entities (orcs)
-    const collidedOrc = orcs.find(orc => orc.x === newX && orc.y === newY);
+    // Check collision with dynamic entities (orcs)
+    const collidedOrc = game.orcs.find(orc => orc.x === newX && orc.y === newY);
     if (collidedOrc) {
-        sounds.playerCollision.play();
-        collisionEffect(newX, newY, () => {
-            displayGameOver("The orcs caught you!", 0);
-            gameOver = true;
-        });
+        handlePlayerDeath(player, newX, newY, "orc", "The orcs caught you!");
         return; // Stop further movement
     }
 
-    // Move player
+    // Move player to new position
     player.x = newX;
     player.y = newY;
 
@@ -433,12 +400,15 @@ function movePlayer(dx, dy) {
 }
 
 function moveOrcs() {
-    if (gameOver) return;
+    if (game.gameOver) return;
+
+    const { player, orcs, gameBoard, settings } = game;
+    const { orcScore } = settings;
 
     let orcCollidedWithTree = false;
     let orcCaughtPlayer = false;
 
-    orcs = orcs.filter(orc => {
+    game.orcs = orcs.filter(orc => {
         // Move the orc toward the player
         if (orc.x < player.x) orc.x++;
         else if (orc.x > player.x) orc.x--;
@@ -448,11 +418,10 @@ function moveOrcs() {
 
         // Check collisions with static entities
         const staticEntityKey = gameBoard[orc.y][orc.x];
-        const staticEntity = entityTypes[staticEntityKey];
         if (staticEntityKey === 'tree') {
             orcCollidedWithTree = true;
             collisionEffect(orc.x, orc.y, () => {}); // Show collision animation
-            score += orcScore; // 
+            game.score += orcScore; // Update score
             return false; // Remove orc
         }
 
@@ -470,31 +439,107 @@ function moveOrcs() {
     if (orcCaughtPlayer) {
         sounds.playerCollision.play();
         collisionEffect(player.x, player.y, () => {
-            displayGameOver("The orcs caught you!", 0);
-            gameOver = true;
+            handlePlayerDeath(player, player.x, player.y, 'orc', "The orcs caught you!");
         });
     }
 }
 
-function updateGame() {
-    // Move orcs
-    moveOrcs();
-    
-    // Redraw the game board to reflect the current state
-    drawGame();
+/* Miscellaneous HANDLERS */
 
-    // Check if the game is won (all orcs eliminated)
-    if (orcs.length === 0) {
-        displayGameOver("You win! All orcs eliminated!", 1);
-        gameOver = true;
-        return;
-    }
+function handlePlayerDeath(player, newX, newY, causeKey, customReason = null) {
+    // Determine reason and sound for death
+    const defaultReason = `You collided with ${causeKey}!`;
+    const deathReason = customReason || defaultReason;
+    const deathSound = causeKey === 'river' ? sounds.playerDrown : sounds.playerCollision;
 
-    // Play move sound if no collisions occurred
-    if (!gameOver) {
-        sounds.move.play();
+    // Erase the player visually from the board
+    clearTile(player.x, player.y);
+
+    // Trigger visual effect and game over
+    collisionEffect(newX, newY, () => {
+        deathSound.play();
+        displayGameOver(deathReason, 0);
+        game.gameOver = true;
+    });
+}
+
+// when a dynamic entity gets killed
+function drawPermanentD(x, y) {
+    clearTile(x, y); // Clear the tile with a black background
+    drawEntity('dead', x, y); // Use the correct entity key
+}
+
+/* DRAW functions */
+
+function drawText(char, x, y, color) {
+    const tileSize = game.settings.tileSize;
+    ctx.fillStyle = color;
+    ctx.font = `${tileSize}px monospace`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(char, x * tileSize + tileSize / 2, y * tileSize + tileSize / 2);
+}
+
+
+function drawEntity(entityKey, x, y) {
+    const tileSize = game.settings.tileSize;
+    const entity = entityTypes[entityKey]; // Lookup by type (e.g., 'grass', 'tree')
+    if (entity) {
+        // console.log(`Draw ${entityKey} at (${x}, ${y})`);
+        ctx.fillStyle = entity.color;
+        ctx.font = `${tileSize}px monospace`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(entity.char, x * tileSize + tileSize / 2, y * tileSize + tileSize / 2);
+    } else {
+        console.log(`No entity found for key: ${entityKey} at (${x}, ${y})`);
     }
 }
+
+
+function drawDynamicEntities() {
+    // Clear and draw the player
+    clearTile(game.player.x, game.player.y); // Clear background under the player
+    drawEntity('player', game.player.x, game.player.y);
+
+    // Clear and draw each orc
+    game.orcs.forEach(orc => {
+        clearTile(orc.x, orc.y); // Clear background under the orc
+        drawEntity('orc', orc.x, orc.y);
+    });
+}
+
+function drawGameBoard() {
+    for (let y = 1; y < game.settings.gridHeight; y++) {
+        for (let x = 0; x < game.settings.gridWidth; x++) {
+            const entityKey = game.gameBoard[y][x];
+            if (entityKey) {
+                drawEntity(entityKey, x, y, entityKey.color);
+            }
+        }
+    }
+}
+
+function drawGameDetails() {
+    const tileSize = game.settings.tileSize;
+    
+    // Clear the first row of the grid
+    ctx.fillStyle = "black";
+    ctx.fillRect(0, 0, canvas.width, tileSize);
+
+    // Draw "Orcs:" left-aligned and "Score:" right-aligned
+    ctx.fillStyle = "white";
+    ctx.font = "16px monospace";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+
+    // Display the number of orcs left
+    ctx.fillText(`Orcs left: ${game.orcs.length}`, 10, tileSize / 2);
+
+    // Display the score
+    ctx.fillText(`Score: ${game.score}`, canvas.width - 150, tileSize / 2);
+}
+
 
 function drawGame() {
     eraseBoard();          // Clear the canvas
@@ -503,22 +548,55 @@ function drawGame() {
     drawDynamicEntities(); // Draw dynamic entities (player, orcs)
 }
 
+/* MAIN GAME LOOP */
+
+function updateGame() {
+    
+    if (game.paused) return; // not yet in use
+
+    // Move orcs
+    moveOrcs();
+    
+    // Redraw the game board to reflect the current state
+    drawGame();
+
+    // Check if the game is won (all orcs eliminated)
+    if (game.orcs.length === 0) {
+        displayGameOver("You win! All orcs eliminated!", 1);
+        game.gameOver = true;
+        return;
+    }
+
+    // Play move sound if no collisions occurred
+    if (!game.gameOver) {
+        sounds.move.play();
+        game.turns += 1;
+    }
+
+    if (game.debug) {
+        console.log("Game state:", { gameBoard: game.gameBoard, orcs: game.orcs, player: game.player, turns: game.turns });
+    }
+}
+
 function restartGame() {
+    const { gridWidth, gridHeight } = game.settings;
+
     // Reset game state
-    gameOver = false;
-    score = 0;
+    game.gameOver = false;
+    game.score = 0;
+    game.turns = 0;
+    game.paused = false; // Not yet in use
+    game.currentLevel = 1; // Not yet in use
 
     // Generate the game board and entities
-    generateGameBoard(); // Populate the gameBoard array with entities
+    generateGameBoard(); // Populate the gameBoard array with static entities
+    generateEntities();  // Populate dynamic entities like orcs and player
 
-    // Generate dynamic entities (e.g., orcs, player)
-    generateEntities();
+    // Reset player position to initial state
+    game.player = game.getInitialPlayerPosition();
 
-    // Reset player position to the center
-    player = { x: Math.floor(gridWidth / 2), y: Math.floor(gridHeight / 2) };
-
-    // Force the player's starting position to be grass
-    gameBoard[player.y][player.x] = 'grass';
+    // Ensure the player's starting position is grass
+    game.gameBoard[game.player.y][game.player.x] = 'grass';
 
     // Redraw the entire game
     drawGame();
@@ -526,7 +604,7 @@ function restartGame() {
 
 // START AND END SCREENS
 
-function drawButton(text, x, y, width, height) {
+function drawButton(ctx, text, x, y, width, height) {
     // Draw button background
     ctx.fillStyle = "white";
     ctx.fillRect(x, y, width, height);
@@ -542,64 +620,69 @@ function drawButton(text, x, y, width, height) {
     ctx.textBaseline = "middle";
     ctx.fillText(text, x + width / 2, y + height / 2);
 
-    // Store the button's coordinates
-    buttonCoords = { x, y, width, height };
+    // Store button coordinates in the game object
+    game.ui.buttonCoords = { x, y, width, height };
 }
 
 // About screen displayed at the beginning of the game
 function displayAbout() {
+    const { ui } = game; // Destructure UI settings
+
     // Clear the canvas
     eraseBoard();
-  
-    // draw a sample game board
-    drawGameBoard(); 
+
+    // Draw a sample game board
+    drawGameBoard();
 
     // Draw the title: "Forest"
     ctx.fillStyle = "white";
     ctx.font = "48px monospace";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText("Forest", canvas.width / 2, canvas.height / 2 - 40);
+    ctx.fillText("Forest", canvas.width / 2, canvas.height / 2 + ui.titleOffset);
 
     // Draw the objective
     ctx.font = "16px monospace";
-    ctx.fillText("Eliminate the orcs by guiding them into trees.", canvas.width / 2, canvas.height / 2 + 20);
+    ctx.fillText(
+        "Eliminate the orcs by guiding them into trees.",
+        canvas.width / 2,
+        canvas.height / 2 + ui.textOffset
+    );
 
     // Draw the start button
     const buttonWidth = 150;
     const buttonHeight = 50;
     const buttonX = (canvas.width - buttonWidth) / 2;
-    const buttonY = canvas.height / 2;
+    const buttonY = (canvas.height / 2) + ui.buttonOffset;
 
-    drawButton("Start Game", buttonX, buttonY, buttonWidth, buttonHeight);
+    drawButton(ctx, "Start Game", buttonX, buttonY, buttonWidth, buttonHeight);
 }
 
 // Various game over screens displayed at the end of the game.
 function displayGameOver(reason, result = 0) {
-  
-    let resultMessage = "GAME OVER";
-    if( result === 1) {
-      resultMessage = "YOU WIN!"
-    }
+    const { ui } = game; // Destructure UI settings
 
-    // Draw "GAME OVER" text
+    // Determine the result message
+    const resultMessage = result === 1 ? "YOU WIN!" : "GAME OVER";
+
+    // Draw "GAME OVER" or "YOU WIN!" text
     ctx.fillStyle = "white";
     ctx.font = "48px monospace";
     ctx.textAlign = "center";
-    ctx.fillText(resultMessage, canvas.width / 2, canvas.height / 2 - 20);
+    ctx.textBaseline = "middle";
+    ctx.fillText(resultMessage, canvas.width / 2, canvas.height / 2 + ui.titleOffset);
 
     // Draw the reason text
     ctx.font = "16px monospace";
-    ctx.fillText(reason, canvas.width / 2, canvas.height / 2 + 20);
+    ctx.fillText(reason, canvas.width / 2, canvas.height / 2 + ui.textOffset);
 
     // Draw the restart button
     const buttonWidth = 150;
     const buttonHeight = 50;
     const buttonX = (canvas.width - buttonWidth) / 2;
-    const buttonY = canvas.height / 2 + 50;
+    const buttonY = canvas.height / 2 + ui.buttonOffset;
 
-    drawButton("Play Again", buttonX, buttonY, buttonWidth, buttonHeight);
+    drawButton(ctx, "Play Again", buttonX, buttonY, buttonWidth, buttonHeight);
 }
-
 
 window.onload = init;
