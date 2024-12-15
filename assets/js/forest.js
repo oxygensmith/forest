@@ -34,11 +34,11 @@ const game = {
         };
     },
     player: {},
-    ui: { // Renamed for brevity
+    ui: { 
         titleOffset: -120,
         textOffset: -80,
-        buttonOffset: 40,
-        buttonCoords: null, // Button coordinates start as null
+        buttonOffset: +40,
+        buttonCoords: null
     },
     debug: false,
 };
@@ -46,8 +46,8 @@ const game = {
 canvas.width = game.settings.gridWidth * game.settings.tileSize;
 canvas.height = game.settings.gridHeight * game.settings.tileSize;
 // Update canvas dimensions to match the game canvas
-creditsCanvas.width = canvas.width;
-creditsCanvas.height = canvas.height;
+creditsCanvas.width = Math.floor(canvas.width * .08);
+creditsCanvas.height = Math.floor(canvas.height * .08);
 
 game.player = game.getInitialPlayerPosition();
 
@@ -633,7 +633,7 @@ function restartGame() {
     game.paused = false; // Not yet in use
     game.currentLevel = 1; // Not yet in use
 
-    calculateGridSize();
+    // calculateGridSize();
 
     // Generate the game board and entities
     generateGameBoard(); // Populate the gameBoard array with static entities
@@ -649,67 +649,82 @@ function restartGame() {
     drawGame();
 }
 
-function drawCredits() {
-    const { gridWidth, gridHeight, tileSize } = game.settings;
+function displayCredits() {
+    // Define overlay size ratios
+    const overlayWidthRatio = 0.8;
+    const overlayHeightRatio = 0.8;
+    const gameWidth = canvas.width;
+    const gameHeight = canvas.height;
 
-    // Calculate dimensions
-    const overlayWidth = Math.min(Math.ceil(gridWidth * 0.8), gridWidth) * tileSize;
-    const overlayHeight = Math.min(Math.ceil(gridHeight * 0.8), gridHeight) * tileSize;
+    // Calculate overlay dimensions
+    const overlayWidth = Math.floor(gameWidth * overlayWidthRatio);
+    const overlayHeight = Math.floor(gameHeight * overlayHeightRatio);
+    const overlayX = Math.floor((gameWidth - overlayWidth) / 2);
+    const overlayY = Math.floor((gameHeight - overlayHeight) / 2);
 
-    const overlayX = (canvas.width - overlayWidth) / 2;
-    const overlayY = (canvas.height - overlayHeight) / 2;
+    console.log(`Game width: ${gameWidth}`);
+    console.log(`Credit screen width: ${overlayWidth}`);
+    console.log(`Should be at x coordinate: ${overlayX}`);
 
-    // Draw black background
+    const titleFontSize = 48;
+    const textFontSize = 20;
+    const boldFontSize = 24;
+    const borderChar = "*";
+    const borderSize = 20; // Font size for border
+    const lineHeight = borderSize + 5; // Adjust for spacing
+
+    // Draw the overlay
     creditsCtx.fillStyle = "black";
     creditsCtx.fillRect(overlayX, overlayY, overlayWidth, overlayHeight);
 
     // Draw border of asterisks
+    creditsCtx.font = `${borderSize}px monospace`;
     creditsCtx.fillStyle = "white";
-    creditsCtx.font = `${tileSize}px monospace`;
+
+    // Top border
+    const topBorder = borderChar.repeat(Math.floor(overlayWidth / borderSize));
+    creditsCtx.fillText(topBorder, gameWidth / 2, overlayY + borderSize);
+
+    // Bottom border
+    creditsCtx.fillText(topBorder, gameWidth / 2, overlayY + overlayHeight - borderSize);
+
+    // Side borders
+    const numVerticalBorders = Math.floor(overlayHeight / lineHeight);
+    for (let i = 1; i <= numVerticalBorders; i++) {
+        creditsCtx.fillText(borderChar, overlayX + borderSize / 2, overlayY + i * lineHeight);
+        creditsCtx.fillText(borderChar, overlayX + overlayWidth - borderSize / 2, overlayY + i * lineHeight);
+    }
+
+    // Set text alignment
     creditsCtx.textAlign = "center";
     creditsCtx.textBaseline = "middle";
 
-    for (let x = 0; x < overlayWidth / tileSize; x++) {
-        creditsCtx.fillText("*", overlayX + x * tileSize + tileSize / 2, overlayY + tileSize / 2);
-        creditsCtx.fillText("*", overlayX + x * tileSize + tileSize / 2, overlayY + overlayHeight - tileSize / 2);
-    }
+    // Draw the credits text (centered vertically)
+    const lines = [
+        "FOREST",
+        "Credits",
+        "M. Cummings • R. Butz",
+        "== SAME TEAM ==",
+        "Cooperative Game Cooperative",
+        "",
+        "Licensed under CC-BY 4.0 © 2024"
+    ];
+    const totalHeight = lines.length * lineHeight;
+    let currentY = overlayY + (overlayHeight - totalHeight) / 2;
 
-    for (let y = 0; y < overlayHeight / tileSize; y++) {
-        creditsCtx.fillText("*", overlayX + tileSize / 2, overlayY + y * tileSize + tileSize / 2);
-        creditsCtx.fillText("*", overlayX + overlayWidth - tileSize / 2, overlayY + y * tileSize + tileSize / 2);
-    }
-
-    // Draw credits text
-    const textX = overlayX + overlayWidth / 2;
-    let textY = overlayY + tileSize * 2;
-
-    creditsCtx.fillStyle = "white";
-    creditsCtx.textAlign = "center";
-
-    // Draw "FOREST" (slightly smaller than the title screen)
-    creditsCtx.font = `${tileSize * 2}px monospace`;
-    creditsCtx.fillText("FOREST", textX, textY);
-    textY += tileSize * 2;
-
-    // Draw "Credits" in bold
-    creditsCtx.font = `bold ${tileSize * 1.5}px monospace`;
-    creditsCtx.fillText("Credits", textX, textY);
-    textY += tileSize * 2;
-
-    // Draw "M. Cummings • R. Butz"
-    creditsCtx.font = `${tileSize}px monospace`;
-    creditsCtx.fillText("M. Cummings • R. Butz", textX, textY);
-    textY += tileSize * 2;
-
-    // Draw "== SAME TEAM =="
-    creditsCtx.font = `bold ${tileSize * 1.25}px monospace`;
-    creditsCtx.fillText("== SAME TEAM ==", textX, textY);
-    textY += tileSize * 2;
-
-    // Draw "Cooperative Game Cooperative"
-    creditsCtx.font = `${tileSize}px monospace`;
-    creditsCtx.fillText("Cooperative Game Cooperative", textX, textY);
+    lines.forEach((line, index) => {
+        if (index === 0) {
+            creditsCtx.font = `${titleFontSize}px monospace`;
+        } else if (index === 1 || index === 3) {
+            creditsCtx.font = `bold ${boldFontSize}px monospace`;
+        } else {
+            creditsCtx.font = `${textFontSize}px monospace`;
+        }
+        creditsCtx.fillText(line, creditsCanvas.width / 2, currentY);
+        currentY += lineHeight;
+    });
 }
+
 
 // START AND END SCREENS
 
@@ -802,7 +817,7 @@ function toggleCredits() {
     creditsCanvas.style.display = game.credits.visible ? "block" : "none";
 
     if (game.credits.visible) {
-        drawCredits();
+        displayCredits();
     } else {
         eraseCredits();
     }
