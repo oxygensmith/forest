@@ -8,8 +8,8 @@ const game = {
         gridHeight: 40,
         numberOfTrees: 450,
         numberOfOrcs: 20,
-        mountainBlobCount: 10,
-        mountainBlobMaxSize: 28,
+        numberOfMountains: 10,
+        mountainMaxSize: 28,
         riverWidth: 7,
         orcScore: 10,
     },
@@ -234,8 +234,8 @@ function generateGameBoard() {
     }
 
     // Add static landscape features
-    generateRiver(riverWidth);
     generateMountainBlobs(numberOfMountains, mountainMaxSize);
+    generateRiver(riverWidth);
     addTreesToBoard(numberOfTrees);
 }
 
@@ -712,7 +712,7 @@ function displayCredits( defaultCreditColor = "white") {
     );
 
     // Draw border of asterisks
-    ctx.fillStyle = defaultCreditColor;
+    ctx.fillStyle = defaultCreditColor;git 
     ctx.font = `${tileSize}px monospace`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
