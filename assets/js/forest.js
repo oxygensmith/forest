@@ -97,23 +97,48 @@ function calculateGridSize() {
 
 function setupButtonListener() {
     canvas.addEventListener("click", (event) => {
-        if (!game.ui.buttonCoords) return; // when no button currently displayed
+        // No buttons currently displayed
+        if (!game.ui.buttonCoords && !game.ui.buttonAreas) return;
 
         const rect = canvas.getBoundingClientRect();
         const mouseX = event.clientX - rect.left;
         const mouseY = event.clientY - rect.top;
 
-        const { x, y, width, height } = game.ui.buttonCoords;
+        // Check if a single screen button (like Start or Restart) is clicked
+        if (game.ui.buttonCoords) {
+            const { x, y, width, height, action } = game.ui.buttonCoords;
 
-        // Check if the click is within the button's bounds
-        if (
-            mouseX >= x &&
-            mouseX <= x + width &&
-            mouseY >= y &&
-            mouseY <= y + height
-        ) {
-            restartGame(); // Start or restart the game
-            game.ui.buttonCoords = null; // Clear button coordinates after click
+            if (
+                mouseX >= x &&
+                mouseX <= x + width &&
+                mouseY >= y &&
+                mouseY <= y + height
+            ) {
+                if (action) action(); // Execute action if provided
+                else restartGame(); // Default action is to restart the game
+                game.ui.buttonCoords = null; // Clear button after click
+                return; // Stop further checks
+            }
+        }
+
+        // Check if any area button (like links on Credits) is clicked
+        if (game.ui.buttonAreas) {
+            const clickedButton = game.ui.buttonAreas.find(
+                ({ x, y, width, height }) =>
+                    mouseX >= x &&
+                    mouseX <= x + width &&
+                    mouseY >= y &&
+                    mouseY <= y + height
+            );
+
+            if (clickedButton) {
+                if (clickedButton.link) {
+                    window.open(clickedButton.link, "_blank"); // Open link in a new tab
+                } else if (clickedButton.action) {
+                    clickedButton.action(); // Execute a custom action if provided
+                }
+                return; // Stop further checks
+            }
         }
     });
 }
@@ -668,25 +693,51 @@ function gameScreenLines(overlayY, overlayHeight, lines, defaultColor = "white")
     const fontSizes = {
         headline: 24,
         subhead: 18,
-        regular: 14
+        regular: 14,
+        button: 14 // Buttons use the same font size as regular text
     };
 
     ctx.fillStyle = defaultColor;
+
     // Calculate total height of all lines
     const totalTextHeight = lines.reduce((sum, [, style = "regular"]) => {
         const fontSize = fontSizes[style] || fontSizes.regular;
         return sum + fontSize + 10; // Add line height (font size + padding)
     }, 0);
 
-    // Calculate the starting Y position to center vertically
+    // Calculate starting Y position to center vertically
     let textY = overlayY + (overlayHeight - totalTextHeight) / 2;
 
+    // Reset button areas for the current screen
+    game.ui.buttonAreas = [];
+
     // Render each line
-    lines.forEach(([text, style = "regular"]) => {
+    lines.forEach(([text, style = "regular", link]) => {
         const fontSize = fontSizes[style] || fontSizes.regular;
         ctx.font = `${fontSize}px monospace`;
+
+        // Measure text width
+        const textWidth = ctx.measureText(text).width;
+
+        // Render the text
         ctx.fillText(text, canvas.width / 2, textY);
-        textY += fontSize + 10; // Move to the next line
+
+        // If this is a button, register its clickable area
+        if (style === "button" && link) {
+            const buttonArea = {
+                x: canvas.width / 2 - textWidth / 2,
+                y: textY - fontSize / 2,
+                width: textWidth,
+                height: fontSize,
+                link: link
+            };
+
+            // Add the button area to the game object
+            game.ui.buttonAreas.push(buttonArea);
+        }
+
+        // Move to the next line
+        textY += fontSize + 10;
     });
 }
 
@@ -748,7 +799,7 @@ function displayCredits( defaultCreditColor = "white") {
     // Credits Text
     const defaultColor = "green";
     const lines = [
-        ["FOREST", "headline"],
+        ["FOREST", "headline", "white"],
         ["= Credits =", "subhead"],
         [""],
         ["design and programming"],
@@ -757,7 +808,9 @@ function displayCredits( defaultCreditColor = "white") {
         ["Cooperative Game Cooperative"],
         ["M. Cummings • R. Butz"],
         [""],
-        ["Licensed under CC-BY 4.0 © 2024"]
+        ["Licensed under CC-BY 4.0 © 2024"],
+        ["Game code repo", "button", "https://github.com/oxygensmith/forest"]
+ 
     ];
 
     const overlayPixelY = overlayStartY * tileSize; // Convert start Y to pixels
@@ -768,24 +821,20 @@ function displayCredits( defaultCreditColor = "white") {
 
 // START AND END SCREENS
 
-function drawButton(ctx, text, x, y, width, height) {
-    // Draw button background
+function drawButton(ctx, text, x, y, width, height, action = null) {
     ctx.fillStyle = "white";
     ctx.fillRect(x, y, width, height);
 
-    // Draw button border
     ctx.strokeStyle = "black";
     ctx.strokeRect(x, y, width, height);
 
-    // Draw button text
     ctx.fillStyle = "black";
     ctx.font = "20px monospace";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(text, x + width / 2, y + height / 2);
 
-    // Store button coordinates in the game object
-    game.ui.buttonCoords = { x, y, width, height };
+    game.ui.buttonCoords = { x, y, width, height, action };
 }
 
 // About screen displayed at the beginning of the game
