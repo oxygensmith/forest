@@ -1,7 +1,5 @@
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
-const creditsCanvas = document.getElementById("creditsCanvas");
-const creditsCtx = creditsCanvas.getContext("2d");
 
 const game = {
     settings: {
@@ -176,7 +174,24 @@ function eraseBoard() {
 }
 
 function eraseCredits() {
-    creditsCtx.clearRect(0, 0, creditsCanvas.width, creditsCanvas.height);
+    const { tileSize, gridWidth, gridHeight } = game.settings;
+
+    // Calculate overlay dimensions based on the grid
+    const overlayGridWidth = Math.floor(gridWidth * 0.5);
+    const overlayGridHeight = Math.floor(gridHeight * 0.5);
+    const overlayStartX = Math.floor((gridWidth - overlayGridWidth) / 2);
+    const overlayStartY = Math.floor((gridHeight - overlayGridHeight) / 2);
+
+    // Clear the overlay area
+    ctx.clearRect(
+        overlayStartX * tileSize,
+        overlayStartY * tileSize,
+        overlayGridWidth * tileSize,
+        overlayGridHeight * tileSize
+    );
+
+    // Optionally, redraw the game screen beneath the cleared area
+    drawGame();
 }
 
 function clearTile(x, y) {
@@ -649,82 +664,107 @@ function restartGame() {
     drawGame();
 }
 
-function displayCredits() {
-    // Define overlay size ratios
-    const overlayWidthRatio = 0.8;
-    const overlayHeightRatio = 0.8;
-    const gameWidth = canvas.width;
-    const gameHeight = canvas.height;
+function gameScreenLines(overlayY, overlayHeight, lines, defaultColor = "white") {
+    const fontSizes = {
+        headline: 24,
+        subhead: 18,
+        regular: 14
+    };
 
-    // Calculate overlay dimensions
-    const overlayWidth = Math.floor(gameWidth * overlayWidthRatio);
-    const overlayHeight = Math.floor(gameHeight * overlayHeightRatio);
-    const overlayX = Math.floor((gameWidth - overlayWidth) / 2);
-    const overlayY = Math.floor((gameHeight - overlayHeight) / 2);
+    ctx.fillStyle = defaultColor;
+    // Calculate total height of all lines
+    const totalTextHeight = lines.reduce((sum, [, style = "regular"]) => {
+        const fontSize = fontSizes[style] || fontSizes.regular;
+        return sum + fontSize + 10; // Add line height (font size + padding)
+    }, 0);
 
-    console.log(`Game width: ${gameWidth}`);
-    console.log(`Credit screen width: ${overlayWidth}`);
-    console.log(`Should be at x coordinate: ${overlayX}`);
+    // Calculate the starting Y position to center vertically
+    let textY = overlayY + (overlayHeight - totalTextHeight) / 2;
 
-    const titleFontSize = 48;
-    const textFontSize = 20;
-    const boldFontSize = 24;
-    const borderChar = "*";
-    const borderSize = 20; // Font size for border
-    const lineHeight = borderSize + 5; // Adjust for spacing
-
-    // Draw the overlay
-    creditsCtx.fillStyle = "black";
-    creditsCtx.fillRect(overlayX, overlayY, overlayWidth, overlayHeight);
-
-    // Draw border of asterisks
-    creditsCtx.font = `${borderSize}px monospace`;
-    creditsCtx.fillStyle = "white";
-
-    // Top border
-    const topBorder = borderChar.repeat(Math.floor(overlayWidth / borderSize));
-    creditsCtx.fillText(topBorder, gameWidth / 2, overlayY + borderSize);
-
-    // Bottom border
-    creditsCtx.fillText(topBorder, gameWidth / 2, overlayY + overlayHeight - borderSize);
-
-    // Side borders
-    const numVerticalBorders = Math.floor(overlayHeight / lineHeight);
-    for (let i = 1; i <= numVerticalBorders; i++) {
-        creditsCtx.fillText(borderChar, overlayX + borderSize / 2, overlayY + i * lineHeight);
-        creditsCtx.fillText(borderChar, overlayX + overlayWidth - borderSize / 2, overlayY + i * lineHeight);
-    }
-
-    // Set text alignment
-    creditsCtx.textAlign = "center";
-    creditsCtx.textBaseline = "middle";
-
-    // Draw the credits text (centered vertically)
-    const lines = [
-        "FOREST",
-        "Credits",
-        "M. Cummings • R. Butz",
-        "== SAME TEAM ==",
-        "Cooperative Game Cooperative",
-        "",
-        "Licensed under CC-BY 4.0 © 2024"
-    ];
-    const totalHeight = lines.length * lineHeight;
-    let currentY = overlayY + (overlayHeight - totalHeight) / 2;
-
-    lines.forEach((line, index) => {
-        if (index === 0) {
-            creditsCtx.font = `${titleFontSize}px monospace`;
-        } else if (index === 1 || index === 3) {
-            creditsCtx.font = `bold ${boldFontSize}px monospace`;
-        } else {
-            creditsCtx.font = `${textFontSize}px monospace`;
-        }
-        creditsCtx.fillText(line, creditsCanvas.width / 2, currentY);
-        currentY += lineHeight;
+    // Render each line
+    lines.forEach(([text, style = "regular"]) => {
+        const fontSize = fontSizes[style] || fontSizes.regular;
+        ctx.font = `${fontSize}px monospace`;
+        ctx.fillText(text, canvas.width / 2, textY);
+        textY += fontSize + 10; // Move to the next line
     });
 }
 
+function displayCredits( defaultCreditColor = "white") {
+    const { tileSize, gridWidth, gridHeight } = game.settings;
+
+    // Calculate overlay dimensions based on the grid
+    const overlayGridWidth = Math.floor(gridWidth * 0.5); // 80% of grid width
+    const overlayGridHeight = Math.floor(gridHeight * 0.5); // 80% of grid height
+    const overlayStartX = Math.floor((gridWidth - overlayGridWidth) / 2); // Center horizontally
+    const overlayStartY = Math.floor((gridHeight - overlayGridHeight) / 2); // Center vertically
+
+    const overlayWidth = overlayGridWidth * tileSize; // Convert to pixel width
+    const overlayHeight = overlayGridHeight * tileSize; // Convert to pixel height
+
+    // Draw overlay background
+    ctx.fillStyle = "black";
+    ctx.fillRect(
+        overlayStartX * tileSize,
+        overlayStartY * tileSize,
+        overlayWidth,
+        overlayHeight
+    );
+
+    // Draw border of asterisks
+    ctx.fillStyle = defaultCreditColor;
+    ctx.font = `${tileSize}px monospace`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+
+    // Top and bottom borders
+    for (let x = overlayStartX; x < overlayStartX + overlayGridWidth; x++) {
+        ctx.fillText(
+            "*",
+            x * tileSize + tileSize / 2,
+            overlayStartY * tileSize + tileSize / 2
+        ); // Top border
+        ctx.fillText(
+            "*",
+            x * tileSize + tileSize / 2,
+            (overlayStartY + overlayGridHeight - 1) * tileSize + tileSize / 2
+        ); // Bottom border
+    }
+
+    // Left and right borders
+    for (let y = overlayStartY; y < overlayStartY + overlayGridHeight; y++) {
+        ctx.fillText(
+            "*",
+            overlayStartX * tileSize + tileSize / 2,
+            y * tileSize + tileSize / 2
+        ); // Left border
+        ctx.fillText(
+            "*",
+            (overlayStartX + overlayGridWidth - 1) * tileSize + tileSize / 2,
+            y * tileSize + tileSize / 2
+        ); // Right border
+    }
+
+    // Credits Text
+    const defaultColor = "green";
+    const lines = [
+        ["FOREST", "headline"],
+        ["= Credits =", "subhead"],
+        [""],
+        ["design and programming"],
+        [""],
+        ["== SAME TEAM ==", "subhead"],
+        ["Cooperative Game Cooperative"],
+        ["M. Cummings • R. Butz"],
+        [""],
+        ["Licensed under CC-BY 4.0 © 2024"]
+    ];
+
+    const overlayPixelY = overlayStartY * tileSize; // Convert start Y to pixels
+    const overlayPixelHeight = overlayGridHeight * tileSize; // Convert height to pixels
+
+    gameScreenLines(overlayPixelY, overlayPixelHeight, lines, defaultColor);
+}
 
 // START AND END SCREENS
 
@@ -810,16 +850,14 @@ function displayGameOver(reason, result = 0) {
 }
 
 function toggleCredits() {
-    const { gridWidth, gridHeight, tileSize } = game.settings;
-
     // Toggle visibility
     game.credits.visible = !game.credits.visible;
-    creditsCanvas.style.display = game.credits.visible ? "block" : "none";
-
+    
     if (game.credits.visible) {
-        displayCredits();
+        displayCredits("green");
     } else {
         eraseCredits();
+        drawGame();
     }
 }
 
