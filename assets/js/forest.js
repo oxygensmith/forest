@@ -5,7 +5,7 @@ const game = {
     settings: {
         tileSize: 32,
         gridWidth: 40,
-        gridHeight: 20,
+        gridHeight: 24,
         numberOfTrees: 150,
         numberOfOrcs: 20,
         numberOfMountains: 3,
