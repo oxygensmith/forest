@@ -3,14 +3,14 @@ const ctx = canvas.getContext("2d");
 
 const game = {
     settings: {
-        tileSize: 18,
-        gridWidth: 80,
-        gridHeight: 40,
-        numberOfTrees: 450,
+        tileSize: 32,
+        gridWidth: 40,
+        gridHeight: 20,
+        numberOfTrees: 150,
         numberOfOrcs: 20,
-        numberOfMountains: 10,
-        mountainMaxSize: 28,
-        riverWidth: 7,
+        numberOfMountains: 3,
+        mountainMaxSize: 12,
+        riverWidth: 3,
         orcScore: 10,
     },
     credits: {
@@ -712,7 +712,7 @@ function displayCredits( defaultCreditColor = "white") {
     );
 
     // Draw border of asterisks
-    ctx.fillStyle = defaultCreditColor;git 
+    ctx.fillStyle = defaultCreditColor;
     ctx.font = `${tileSize}px monospace`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
