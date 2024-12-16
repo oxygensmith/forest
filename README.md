@@ -2,7 +2,7 @@
 
 You're an elf. Sneak between trees, don't get captured by the orcs. Manipulate orcs with your movements so they clobber themselves on trees; when they're all gone, you win. Don't run into trees, rivers, the mountains, or the border yourself. Orcs have a very robotic comparison-to-the-player's-x-and-y logic for 'pursuit.' Runs in the browser. 
 
-This game was made to show my kid how games on the iPad, browser etc. are *developed* over time. I let him make decisions about how the game works. Some minor things I don't agree with (why is the border red?) but he has some good ideas in the list to be added. He decided to add rivers and mountains and make the board bigger.
+I am developing this game with my 7-year-old as a way of learning about how games are *developed* over time. He makes decisions about how the game works, like adding a river and mountains.
 
 See https://forest.robbutz.com for the latest version of the game.
 
