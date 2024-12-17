@@ -43,10 +43,6 @@ const game = {
 
 canvas.width = game.settings.gridWidth * game.settings.tileSize;
 canvas.height = game.settings.gridHeight * game.settings.tileSize;
-// Update canvas dimensions to match the game canvas
-creditsCanvas.width = Math.floor(canvas.width * .08);
-creditsCanvas.height = Math.floor(canvas.height * .08);
-
 game.player = game.getInitialPlayerPosition();
 
  // Default to grass for all tiles
@@ -61,7 +57,7 @@ const entityTypes = {
     river: { char: 'r', color: 'blue', passable: false, kills: true },
     orc: { char: 'O', color: 'orange', passable: false, kills: true },
     player: { char: 'X', color: 'white', passable: true },
-    dead: { char: 'D', color: 'red', passable: true, kills: true },
+    dead: { char: 'D', color: 'red', passable: true },
     border: { char: 'X', color: 'red', passable: false, kills: true },
 };
 
@@ -73,6 +69,7 @@ const sounds = {
 };
 
 function calculateGridSize() {
+    // for when grid adapts to the initial window size
     const { tileSize } = game.settings;
 
     // Get viewport dimensions
@@ -96,17 +93,21 @@ function calculateGridSize() {
 
 
 function setupButtonListener() {
-    canvas.addEventListener("click", (event) => {
-        // No buttons currently displayed
-        if (!game.ui.buttonCoords && !game.ui.buttonAreas) return;
+    // Map of button class names to their corresponding actions
+    const buttonActions = {
+        "start-button": restartGame,
+        "restart-button": restartGame,
+        "github-link": () => window.open("https://github.com/oxygensmith/forest", "_blank")
+    };
 
+    canvas.addEventListener("click", (event) => {
         const rect = canvas.getBoundingClientRect();
         const mouseX = event.clientX - rect.left;
         const mouseY = event.clientY - rect.top;
 
-        // Check if a single screen button (like Start or Restart) is clicked
-        if (game.ui.buttonCoords) {
-            const { x, y, width, height, action } = game.ui.buttonCoords;
+        // Check each button area for a click
+        game.ui.buttonAreas.forEach(button => {
+            const { x, y, width, height, className } = button;
 
             if (
                 mouseX >= x &&
@@ -114,32 +115,12 @@ function setupButtonListener() {
                 mouseY >= y &&
                 mouseY <= y + height
             ) {
-                if (action) action(); // Execute action if provided
-                else restartGame(); // Default action is to restart the game
-                game.ui.buttonCoords = null; // Clear button after click
-                return; // Stop further checks
-            }
-        }
-
-        // Check if any area button (like links on Credits) is clicked
-        if (game.ui.buttonAreas) {
-            const clickedButton = game.ui.buttonAreas.find(
-                ({ x, y, width, height }) =>
-                    mouseX >= x &&
-                    mouseX <= x + width &&
-                    mouseY >= y &&
-                    mouseY <= y + height
-            );
-
-            if (clickedButton) {
-                if (clickedButton.link) {
-                    window.open(clickedButton.link, "_blank"); // Open link in a new tab
-                } else if (clickedButton.action) {
-                    clickedButton.action(); // Execute a custom action if provided
+                // If a matching action exists, trigger it
+                if (className && buttonActions[className]) {
+                    buttonActions[className]();
                 }
-                return; // Stop further checks
             }
-        }
+        });
     });
 }
 
@@ -174,6 +155,8 @@ function init() {
     
     // Calculate grid dimensions based on viewport
     // calculateGridSize();
+
+    console.log("Game settings before displayAbout:", game.settings);
     
     // Setup button click listener
     setupButtonListener();
@@ -689,12 +672,90 @@ function restartGame() {
     drawGame();
 }
 
+
+// START, END, and CREDIT SCREENS
+
+/* button rendering function for start, end and credit screens. */
+function drawButton(ctx, text, x, y, width, height, action = null) {
+    
+    ctx.fillStyle = "white";
+    ctx.fillRect(x, y, width, height);
+
+    ctx.strokeStyle = "black";
+    ctx.strokeRect(x, y, width, height);
+
+    ctx.fillStyle = "black";
+    ctx.font = "20px monospace";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(text, x + width / 2, y + height / 2);
+
+    game.ui.buttonCoords = { x, y, width, height, action };
+}
+
+function drawModalOverlay(percentageWidth, percentageHeight, tileSize, gridWidth, gridHeight, fillColor = "black") {
+    // Calculate overlay dimensions based on percentage of grid size
+    const overlayGridWidth = Math.floor(gridWidth * (percentageWidth / 100));
+    const overlayGridHeight = Math.floor(gridHeight * (percentageHeight / 100));
+    const overlayStartX = Math.floor((gridWidth - overlayGridWidth) / 2); // Center horizontally
+    const overlayStartY = Math.floor((gridHeight - overlayGridHeight) / 2); // Center vertically
+
+    const overlayWidth = overlayGridWidth * tileSize; // Convert to pixel width
+    const overlayHeight = overlayGridHeight * tileSize; // Convert to pixel height
+
+    // Draw overlay background
+    ctx.fillStyle = fillColor;
+    ctx.fillRect(
+        overlayStartX * tileSize,
+        overlayStartY * tileSize,
+        overlayWidth,
+        overlayHeight
+    );
+
+    // Return overlay dimensions for further use (e.g., border, text placement)
+    return { 
+        overlayStartX, 
+        overlayStartY, 
+        overlayGridWidth, 
+        overlayGridHeight,
+        pixelY: overlayStartY * tileSize,
+        pixelHeight: overlayGridHeight * tileSize};
+}
+
+function drawModalBorder(char = "*", startX, startY, gridWidth, gridHeight, tileSize, color = "white") {
+    console.log("drawModalBorder: Start", { startX, startY, gridWidth, gridHeight });
+    ctx.fillStyle = color;
+    ctx.font = `${tileSize}px monospace`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+
+    // Top and bottom borders
+    for (let x = startX; x < startX + gridWidth; x++) {
+        ctx.fillText(char, x * tileSize + tileSize / 2, startY * tileSize + tileSize / 2); // Top border
+        ctx.fillText(char, x * tileSize + tileSize / 2, (startY + gridHeight - 1) * tileSize + tileSize / 2); // Bottom border
+    }
+
+    // Left and right borders
+    for (let y = startY; y < startY + gridHeight; y++) {
+        ctx.fillText(char, startX * tileSize + tileSize / 2, y * tileSize + tileSize / 2); // Left border
+        ctx.fillText(char, (startX + gridWidth - 1) * tileSize + tileSize / 2, y * tileSize + tileSize / 2); // Right border
+    }
+    console.log("drawModalBorder: End");
+}
+
+/* text renderer function for credit screens. */
 function gameScreenLines(overlayY, overlayHeight, lines, defaultColor = "white") {
+    
+    const tileSize = game.settings.tileSize;
+    const maxTextSize = 32; // Maximum size for standard text and buttons
+
+    // Dynamically set sizes with a cap at 32
     const fontSizes = {
+        title: 48,
         headline: 24,
         subhead: 18,
-        regular: 14,
-        button: 14 // Buttons use the same font size as regular text
+        regular: Math.min(tileSize, maxTextSize),
+        button: Math.min(tileSize, maxTextSize)
     };
 
     ctx.fillStyle = defaultColor;
@@ -712,7 +773,7 @@ function gameScreenLines(overlayY, overlayHeight, lines, defaultColor = "white")
     game.ui.buttonAreas = [];
 
     // Render each line
-    lines.forEach(([text, style = "regular", link]) => {
+    lines.forEach(([text, style = "regular", className]) => {
         const fontSize = fontSizes[style] || fontSizes.regular;
         ctx.font = `${fontSize}px monospace`;
 
@@ -722,17 +783,16 @@ function gameScreenLines(overlayY, overlayHeight, lines, defaultColor = "white")
         // Render the text
         ctx.fillText(text, canvas.width / 2, textY);
 
-        // If this is a button, register its clickable area
-        if (style === "button" && link) {
+        // If this is a button, register its clickable area with className
+        if (style === "button" && className) {
             const buttonArea = {
                 x: canvas.width / 2 - textWidth / 2,
                 y: textY - fontSize / 2,
                 width: textWidth,
                 height: fontSize,
-                link: link
+                className: className
             };
 
-            // Add the button area to the game object
             game.ui.buttonAreas.push(buttonArea);
         }
 
@@ -741,63 +801,11 @@ function gameScreenLines(overlayY, overlayHeight, lines, defaultColor = "white")
     });
 }
 
-function displayCredits( defaultCreditColor = "white") {
+function displayCredits(defaultCreditColor = "white") {
     const { tileSize, gridWidth, gridHeight } = game.settings;
+    const overlay = drawModalOverlay(50, 50, tileSize, gridWidth, gridHeight, "black");
+    drawModalBorder("*", overlay.overlayStartX, overlay.overlayStartY, overlay.overlayGridWidth, overlay.overlayGridHeight, tileSize);
 
-    // Calculate overlay dimensions based on the grid
-    const overlayGridWidth = Math.floor(gridWidth * 0.5); // 80% of grid width
-    const overlayGridHeight = Math.floor(gridHeight * 0.5); // 80% of grid height
-    const overlayStartX = Math.floor((gridWidth - overlayGridWidth) / 2); // Center horizontally
-    const overlayStartY = Math.floor((gridHeight - overlayGridHeight) / 2); // Center vertically
-
-    const overlayWidth = overlayGridWidth * tileSize; // Convert to pixel width
-    const overlayHeight = overlayGridHeight * tileSize; // Convert to pixel height
-
-    // Draw overlay background
-    ctx.fillStyle = "black";
-    ctx.fillRect(
-        overlayStartX * tileSize,
-        overlayStartY * tileSize,
-        overlayWidth,
-        overlayHeight
-    );
-
-    // Draw border of asterisks
-    ctx.fillStyle = defaultCreditColor;
-    ctx.font = `${tileSize}px monospace`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-
-    // Top and bottom borders
-    for (let x = overlayStartX; x < overlayStartX + overlayGridWidth; x++) {
-        ctx.fillText(
-            "*",
-            x * tileSize + tileSize / 2,
-            overlayStartY * tileSize + tileSize / 2
-        ); // Top border
-        ctx.fillText(
-            "*",
-            x * tileSize + tileSize / 2,
-            (overlayStartY + overlayGridHeight - 1) * tileSize + tileSize / 2
-        ); // Bottom border
-    }
-
-    // Left and right borders
-    for (let y = overlayStartY; y < overlayStartY + overlayGridHeight; y++) {
-        ctx.fillText(
-            "*",
-            overlayStartX * tileSize + tileSize / 2,
-            y * tileSize + tileSize / 2
-        ); // Left border
-        ctx.fillText(
-            "*",
-            (overlayStartX + overlayGridWidth - 1) * tileSize + tileSize / 2,
-            y * tileSize + tileSize / 2
-        ); // Right border
-    }
-
-    // Credits Text
-    const defaultColor = "green";
     const lines = [
         ["FOREST", "headline", "white"],
         ["= Credits =", "subhead"],
@@ -809,93 +817,62 @@ function displayCredits( defaultCreditColor = "white") {
         ["M. Cummings • R. Butz"],
         [""],
         ["Licensed under CC-BY 4.0 © 2024"],
-        ["Game code repo", "button", "https://github.com/oxygensmith/forest"]
- 
+        ["Game code repo", "button", "github-link"]
     ];
 
-    const overlayPixelY = overlayStartY * tileSize; // Convert start Y to pixels
-    const overlayPixelHeight = overlayGridHeight * tileSize; // Convert height to pixels
-
-    gameScreenLines(overlayPixelY, overlayPixelHeight, lines, defaultColor);
+    gameScreenLines(overlay.pixelY, overlay.pixelHeight, lines, defaultCreditColor);
 }
 
-// START AND END SCREENS
-
-function drawButton(ctx, text, x, y, width, height, action = null) {
-    ctx.fillStyle = "white";
-    ctx.fillRect(x, y, width, height);
-
-    ctx.strokeStyle = "black";
-    ctx.strokeRect(x, y, width, height);
-
-    ctx.fillStyle = "black";
-    ctx.font = "20px monospace";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(text, x + width / 2, y + height / 2);
-
-    game.ui.buttonCoords = { x, y, width, height, action };
-}
 
 // About screen displayed at the beginning of the game
 function displayAbout() {
-    const { ui } = game; // Destructure UI settings
+    const { tileSize, gridWidth, gridHeight } = game.settings;
 
     // Clear the canvas
     eraseBoard();
-
     // Draw a sample game board
     drawGameBoard();
+    
+    // Draw the modal overlay (50% width and height, centered)
+    const overlay = drawModalOverlay(50, 50, tileSize, gridWidth, gridHeight, "black");
+    
+    // Draw the border around the modal
+    drawModalBorder("*", overlay.overlayStartX, overlay.overlayStartY, overlay.overlayGridWidth, overlay.overlayGridHeight, tileSize);
+    
+    // Define the About screen text and the Start Game button
+    const lines = [
+        ["Forest", "title", "white"],
+        [""],
+        ["Eliminate the orcs", "regular"],
+        ["by guiding them into trees.", "regular"],
+        [""],
+        ["Start Game", "button", "start-button"]
+    ];
 
-    // Draw the title: "Forest"
-    ctx.fillStyle = "white";
-    ctx.font = "48px monospace";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText("Forest", canvas.width / 2, canvas.height / 2 + ui.titleOffset);
-
-    // Draw the objective
-    ctx.font = "16px monospace";
-    ctx.fillText(
-        "Eliminate the orcs by guiding them into trees.",
-        canvas.width / 2,
-        canvas.height / 2 + ui.textOffset
-    );
-
-    // Draw the start button
-    const buttonWidth = 150;
-    const buttonHeight = 50;
-    const buttonX = (canvas.width - buttonWidth) / 2;
-    const buttonY = (canvas.height / 2) + ui.buttonOffset;
-
-    drawButton(ctx, "Start Game", buttonX, buttonY, buttonWidth, buttonHeight);
+    // Render the lines within the modal overlay
+    gameScreenLines(overlay.pixelY, overlay.pixelHeight, lines, "white");
+    console.log("displayAbout: End");
 }
 
 // Various game over screens displayed at the end of the game.
 function displayGameOver(reason, result = 0) {
-    const { ui } = game; // Destructure UI settings
+    const { tileSize, gridWidth, gridHeight } = game.settings;
+    
+    // Draw the modal overlay
+    const overlay = drawModalOverlay(50, 50, tileSize, gridWidth, gridHeight, "black");
+    drawModalBorder("*", overlay.overlayStartX, overlay.overlayStartY, overlay.overlayGridWidth, overlay.overlayGridHeight, game.settings.tileSize);
 
-    // Determine the result message
+    // Define the game over lines
     const resultMessage = result === 1 ? "YOU WIN!" : "GAME OVER";
+    const lines = [
+        [resultMessage, "title"],
+        [reason, "regular"],
+        [""],
+        ["Play Again", "button", "restart-button"]
+    ];
 
-    // Draw "GAME OVER" or "YOU WIN!" text
-    ctx.fillStyle = "white";
-    ctx.font = "48px monospace";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(resultMessage, canvas.width / 2, canvas.height / 2 + ui.titleOffset);
-
-    // Draw the reason text
-    ctx.font = "16px monospace";
-    ctx.fillText(reason, canvas.width / 2, canvas.height / 2 + ui.textOffset);
-
-    // Draw the restart button
-    const buttonWidth = 150;
-    const buttonHeight = 50;
-    const buttonX = (canvas.width - buttonWidth) / 2;
-    const buttonY = canvas.height / 2 + ui.buttonOffset;
-
-    drawButton(ctx, "Play Again", buttonX, buttonY, buttonWidth, buttonHeight);
+    // Draw the lines
+    gameScreenLines(overlay.pixelY, overlay.pixelHeight, lines, "white");
 }
 
 function toggleCredits() {
@@ -904,8 +881,10 @@ function toggleCredits() {
     
     if (game.credits.visible) {
         displayCredits("green");
+        console.log("displayCredits toggled on.");
     } else {
         eraseCredits();
+        console.log("displayCredits toggled off.");
         drawGame();
     }
 }
