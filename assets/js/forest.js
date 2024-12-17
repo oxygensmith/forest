@@ -630,7 +630,7 @@ function updateGame() {
 
     // Check if the game is won (all orcs eliminated)
     if (game.orcs.length === 0) {
-        displayGameOver("You win! All orcs eliminated!", 1);
+        displayGameOver("All orcs eliminated!", 1);
         game.gameOver = true;
         return;
     }
@@ -693,33 +693,37 @@ function drawButton(ctx, text, x, y, width, height, action = null) {
     game.ui.buttonCoords = { x, y, width, height, action };
 }
 
-function drawModalOverlay(percentageWidth, percentageHeight, tileSize, gridWidth, gridHeight, fillColor = "black") {
-    // Calculate overlay dimensions based on percentage of grid size
+function drawModalOverlay(percentageWidth, percentageHeight, tileSize, gridWidth, gridHeight, fillColor = "black", opacity = 1) {
     const overlayGridWidth = Math.floor(gridWidth * (percentageWidth / 100));
     const overlayGridHeight = Math.floor(gridHeight * (percentageHeight / 100));
-    const overlayStartX = Math.floor((gridWidth - overlayGridWidth) / 2); // Center horizontally
-    const overlayStartY = Math.floor((gridHeight - overlayGridHeight) / 2); // Center vertically
+    const overlayStartX = Math.floor((gridWidth - overlayGridWidth) / 2);
+    const overlayStartY = Math.floor((gridHeight - overlayGridHeight) / 2);
 
-    const overlayWidth = overlayGridWidth * tileSize; // Convert to pixel width
-    const overlayHeight = overlayGridHeight * tileSize; // Convert to pixel height
+    const overlayPixelWidth = overlayGridWidth * tileSize;
+    const overlayPixelHeight = overlayGridHeight * tileSize;
+    const overlayPixelX = overlayStartX * tileSize;
+    const overlayPixelY = overlayStartY * tileSize;
 
-    // Draw overlay background
+    // Set transparency for the modal
+    ctx.save(); // Save current canvas state
+    ctx.globalAlpha = opacity;
+
+    // Draw the overlay background
     ctx.fillStyle = fillColor;
-    ctx.fillRect(
-        overlayStartX * tileSize,
-        overlayStartY * tileSize,
-        overlayWidth,
-        overlayHeight
-    );
+    ctx.fillRect(overlayPixelX, overlayPixelY, overlayPixelWidth, overlayPixelHeight);
 
-    // Return overlay dimensions for further use (e.g., border, text placement)
-    return { 
-        overlayStartX, 
-        overlayStartY, 
-        overlayGridWidth, 
+    ctx.restore(); // Restore canvas state to remove transparency
+
+    return {
+        overlayStartX,
+        overlayStartY,
+        overlayGridWidth,
         overlayGridHeight,
-        pixelY: overlayStartY * tileSize,
-        pixelHeight: overlayGridHeight * tileSize};
+        pixelX: overlayPixelX,
+        pixelY: overlayPixelY,
+        pixelWidth: overlayPixelWidth,
+        pixelHeight: overlayPixelHeight
+    };
 }
 
 function drawModalBorder(char = "*", startX, startY, gridWidth, gridHeight, tileSize, color = "white") {
@@ -745,17 +749,16 @@ function drawModalBorder(char = "*", startX, startY, gridWidth, gridHeight, tile
 
 /* text renderer function for credit screens. */
 function gameScreenLines(overlayY, overlayHeight, lines, defaultColor = "white") {
-    
-    const tileSize = game.settings.tileSize;
-    const maxTextSize = 32; // Maximum size for standard text and buttons
+    const { tileSize } = game.settings; // Fetch tile size for consistency
+    const maxTextSize = 32; // Define max text size for regular text
 
-    // Dynamically set sizes with a cap at 32
     const fontSizes = {
-        title: 48,
-        headline: 24,
-        subhead: 18,
+        title: 56,
+        headline: 48,
+        subhead: 40,
         regular: Math.min(tileSize, maxTextSize),
-        button: Math.min(tileSize, maxTextSize)
+        button: 20,
+        small: 20
     };
 
     ctx.fillStyle = defaultColor;
@@ -776,47 +779,61 @@ function gameScreenLines(overlayY, overlayHeight, lines, defaultColor = "white")
     lines.forEach(([text, style = "regular", className]) => {
         const fontSize = fontSizes[style] || fontSizes.regular;
         ctx.font = `${fontSize}px monospace`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
 
-        // Measure text width
         const textWidth = ctx.measureText(text).width;
 
-        // Render the text
-        ctx.fillText(text, canvas.width / 2, textY);
+        if (style === "button") {
+            // Draw button background
+            const buttonPadding = 10;
+            const buttonWidth = textWidth + buttonPadding * 2;
+            const buttonHeight = fontSize + buttonPadding * 2;
 
-        // If this is a button, register its clickable area with className
-        if (style === "button" && className) {
-            const buttonArea = {
-                x: canvas.width / 2 - textWidth / 2,
-                y: textY - fontSize / 2,
-                width: textWidth,
-                height: fontSize,
+            const buttonX = (canvas.width - buttonWidth) / 2;
+            const buttonY = textY - buttonHeight / 2;
+
+            ctx.fillStyle = defaultColor; // Use defaultColor for button background
+            ctx.fillRect(buttonX, buttonY, buttonWidth, buttonHeight);
+
+            // Draw button text
+            ctx.fillStyle = "black"; // Button text color
+            ctx.fillText(text, canvas.width / 2, textY);
+
+            // Save button area for click detection
+            game.ui.buttonAreas.push({
+                x: buttonX,
+                y: buttonY,
+                width: buttonWidth,
+                height: buttonHeight,
                 className: className
-            };
+            });
 
-            game.ui.buttonAreas.push(buttonArea);
+            ctx.fillStyle = defaultColor; // Reset to default color for next elements
+        } else {
+            // Draw regular text
+            ctx.fillText(text, canvas.width / 2, textY);
         }
 
-        // Move to the next line
-        textY += fontSize + 10;
+        textY += fontSize + 10; // Move to the next line
     });
 }
 
 function displayCredits(defaultCreditColor = "white") {
     const { tileSize, gridWidth, gridHeight } = game.settings;
-    const overlay = drawModalOverlay(50, 50, tileSize, gridWidth, gridHeight, "black");
+    const overlay = drawModalOverlay(50, 75, tileSize, gridWidth, gridHeight, "black");
     drawModalBorder("*", overlay.overlayStartX, overlay.overlayStartY, overlay.overlayGridWidth, overlay.overlayGridHeight, tileSize);
 
     const lines = [
-        ["FOREST", "headline", "white"],
-        ["= Credits =", "subhead"],
-        [""],
-        ["design and programming"],
+        ["FOREST", "title", "white"],
+        ["by", ],
         [""],
         ["== SAME TEAM ==", "subhead"],
         ["Cooperative Game Cooperative"],
-        ["M. Cummings • R. Butz"],
+        ["M. Cummings • R. Butz", "small"],
         [""],
-        ["Licensed under CC-BY 4.0 © 2024"],
+        ["Licensed under CC-BY 4.0 2024", "small"],
+        [""],
         ["Game code repo", "button", "github-link"]
     ];
 
@@ -831,6 +848,7 @@ function displayAbout() {
     // Clear the canvas
     eraseBoard();
     // Draw a sample game board
+    generateGameBoard();
     drawGameBoard();
     
     // Draw the modal overlay (50% width and height, centered)
@@ -857,15 +875,17 @@ function displayAbout() {
 // Various game over screens displayed at the end of the game.
 function displayGameOver(reason, result = 0) {
     const { tileSize, gridWidth, gridHeight } = game.settings;
-    
-    // Draw the modal overlay
-    const overlay = drawModalOverlay(50, 50, tileSize, gridWidth, gridHeight, "black");
-    drawModalBorder("*", overlay.overlayStartX, overlay.overlayStartY, overlay.overlayGridWidth, overlay.overlayGridHeight, game.settings.tileSize);
+
+    // Draw the modal overlay with transparency (e.g., 0.6 opacity)
+    const overlay = drawModalOverlay(50, 50, tileSize, gridWidth, gridHeight, "black", 0.6);
+
+    // Draw the border
+    drawModalBorder("*", overlay.overlayStartX, overlay.overlayStartY, overlay.overlayGridWidth, overlay.overlayGridHeight, tileSize);
 
     // Define the game over lines
     const resultMessage = result === 1 ? "YOU WIN!" : "GAME OVER";
     const lines = [
-        [resultMessage, "title"],
+        [resultMessage, "title" ],
         [reason, "regular"],
         [""],
         ["Play Again", "button", "restart-button"]
