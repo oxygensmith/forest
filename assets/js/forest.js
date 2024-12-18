@@ -169,8 +169,6 @@ function init() {
     // Calculate grid dimensions based on viewport
     // calculateGridSize();
 
-    console.log("Game settings before displayAbout:", game.settings);
-    
     // Setup button click listener
     setupButtonListener();
 
@@ -604,23 +602,24 @@ function drawGameBoard() {
 }
 
 function drawGameDetails() {
-    const tileSize = game.settings.tileSize;
+    const { tileSize, gridWidth } = game.settings;
     
     // Clear the first row of the grid
     ctx.fillStyle = "black";
     ctx.fillRect(0, 0, canvas.width, tileSize);
 
-    // Draw "Orcs:" left-aligned and "Score:" right-aligned
+    // Set font to match tile size
     ctx.fillStyle = "white";
-    ctx.font = "16px monospace";
+    ctx.font = `${tileSize}px monospace`;
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
 
-    // Display the number of orcs left
+    // Display "Orcs left"
     ctx.fillText(`Orcs left: ${game.orcs.length}`, 10, tileSize / 2);
 
-    // Display the score
-    ctx.fillText(`Score: ${game.score}`, canvas.width - 150, tileSize / 2);
+    // Display "Score" aligned to the right
+    ctx.textAlign = "right";
+    ctx.fillText(`Score: ${game.score}`, canvas.width - 10, tileSize / 2);
 }
 
 
@@ -855,7 +854,8 @@ function displayCredits(defaultCreditColor = "white") {
     drawModalBorder("*", overlay.overlayStartX, overlay.overlayStartY, overlay.overlayGridWidth, overlay.overlayGridHeight, tileSize);
 
     const lines = [
-        ["assets/img/forest-game-title.svg", 400, "image"],
+        ["assets/img/forest-game-title.svg", "image", 300, 120], // Image with dimensions
+        [""],
         ["by", ],
         [""],
         ["== SAME TEAM ==", "subhead"],
