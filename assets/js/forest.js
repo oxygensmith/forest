@@ -281,19 +281,48 @@ function generateGameBoard() {
 
 function generateEntities() {
     const { gridWidth, gridHeight, numberOfOrcs } = game.settings;
-    const gameplayGridHeight = gridHeight - 1; // Exclude the UI row
+     
+    // Exclude the UI row from being a place where orcs can spawn.
+    const gameplayGridHeight = gridHeight - 1;
 
-    game.orcs = []; // Reset the orcs array
-    game.player = game.getInitialPlayerPosition(); // Reset player position
+    // Track occupied positions to stop orcs and players getting positioned in same space.
+    const occupiedPositions = new Set();
+    const player = game.getInitialPlayerPosition();
+    game.player = player;
 
+    // start the 3x3 grid around the player off as grass so the player isn't starting the game "stuck."
+    const playerAreaOffsets = [
+        [-1, -1], [0, -1], [1, -1],
+        [-1, 0], [0, 0], [1, 0],
+        [-1, 1], [0, 1], [1, 1],
+    ];
+
+    playerAreaOffsets.forEach(([dx, dy]) => {
+        const x = player.x + dx;
+        const y = player.y + dy;
+        if (x >= 0 && x < gridWidth && y >= 0 && y < gameplayGridHeight) {
+            game.gameBoard[y][x] = 'grass'; // Clear the area
+            occupiedPositions.add(`${x},${y}`); // Mark as occupied
+        }
+    });
+
+    // Reset orcs array
+    game.orcs = [];
+
+    // Generate orcs
     for (let i = 0; i < numberOfOrcs; i++) {
         let x, y;
         do {
-            x = Math.floor(Math.random() * (gridWidth - 2)) + 1; // Avoid left/right borders
-            y = Math.floor(Math.random() * (gameplayGridHeight - 1)) + 2; // Avoid top/bottom borders
-        } while (game.gameBoard[y][x] !== 'grass'); // Ensure orcs spawn on grass
+            x = Math.floor(Math.random() * (gridWidth - 2)) + 1; // Avoid borders
+            y = Math.floor(Math.random() * (gameplayGridHeight - 1)) + 1; // Avoid top/bottom borders
+        // Ensure the position is not occupied and not adjacent to the player
+        } while (
+            occupiedPositions.has(`${x},${y}`) || // Position already occupied
+            Math.abs(x - player.x) <= 1 && Math.abs(y - player.y) <= 1 // Too close to player
+        );
 
         game.orcs.push({ x, y }); // Add orc to the array
+        occupiedPositions.add(`${x},${y}`); // Mark as occupied
     }
 }
 
