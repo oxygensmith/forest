@@ -13,9 +13,7 @@ const game = {
         riverWidth: 3,
         orcScore: 10,
     },
-    credits: {
-        visible: false,
-    },
+    screenVisible: null,
     score: 0,
     turns: 0,
     gameOver: false,
@@ -39,6 +37,13 @@ const game = {
         buttonCoords: null
     },
     debug: false,
+};
+
+const SCREENS = {
+    ABOUT: "about",
+    GAME_OVER: "gameOver",
+    CREDITS: "credits",
+    NONE: null,
 };
 
 canvas.width = game.settings.gridWidth * game.settings.tileSize;
@@ -91,6 +96,14 @@ function calculateGridSize() {
     console.log(`Grid calculated: ${gridWidth} x ${gridHeight} tiles`);
 }
 
+function canDisplayScreen(screenName) {
+    if (game.screenVisible !== SCREENS.NONE) {
+        console.log(`${game.screenVisible} screen in the way, skipping.`);
+        return false;
+    }
+    game.screenVisible = screenName;
+    return true;
+}
 
 function setupButtonListener() {
     // Map of button class names to their corresponding actions
@@ -197,6 +210,8 @@ function eraseCredits() {
         overlayGridWidth * tileSize,
         overlayGridHeight * tileSize
     );
+
+    game.screenVisible = null;
 
     // Optionally, redraw the game screen beneath the cleared area
     drawGame();
@@ -655,6 +670,7 @@ function restartGame() {
     game.turns = 0;
     game.paused = false; // Not yet in use
     game.currentLevel = 1; // Not yet in use
+    game.screenVisible = null;
 
     // calculateGridSize();
 
@@ -674,24 +690,6 @@ function restartGame() {
 
 
 // START, END, and CREDIT SCREENS
-
-/* button rendering function for start, end and credit screens. */
-function drawButton(ctx, text, x, y, width, height, action = null) {
-    
-    ctx.fillStyle = "white";
-    ctx.fillRect(x, y, width, height);
-
-    ctx.strokeStyle = "black";
-    ctx.strokeRect(x, y, width, height);
-
-    ctx.fillStyle = "black";
-    ctx.font = "20px monospace";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(text, x + width / 2, y + height / 2);
-
-    game.ui.buttonCoords = { x, y, width, height, action };
-}
 
 function drawModalOverlay(percentageWidth, percentageHeight, tileSize, gridWidth, gridHeight, fillColor = "black", opacity = 1) {
     const overlayGridWidth = Math.floor(gridWidth * (percentageWidth / 100));
@@ -744,13 +742,52 @@ function drawModalBorder(char = "*", startX, startY, gridWidth, gridHeight, tile
         ctx.fillText(char, startX * tileSize + tileSize / 2, y * tileSize + tileSize / 2); // Left border
         ctx.fillText(char, (startX + gridWidth - 1) * tileSize + tileSize / 2, y * tileSize + tileSize / 2); // Right border
     }
-    console.log("drawModalBorder: End");
 }
 
-/* text renderer function for credit screens. */
+/* for displaying images on start/end/credit game screens. */
+function gameScreenImage(url, yPosition, width = 400, height = null) {
+    const img = new Image();
+    img.src = url;
+
+    img.onload = () => {
+        // Auto-calculate height if not provided
+        if (!height) {
+            const aspectRatio = img.width / img.height;
+            height = Math.floor(width / aspectRatio);
+        }
+
+        const xPosition = (canvas.width - width) / 2; // Center the image horizontally
+        ctx.drawImage(img, xPosition, yPosition, width, height);
+    };
+
+    img.onerror = () => {
+        console.error(`Failed to load image: ${url}`);
+    };
+}
+
+function gameScreenButton(text, x, y, width, height, defaultColor = "white", textColor = "black", className = null) {
+    console.log("gameScreenButton: ", {text, x, y, width, height, defaultColor, textColor, className});
+    ctx.fillStyle = defaultColor;
+    ctx.fillRect(x, y, width, height);
+
+    ctx.strokeStyle = "black";
+    ctx.strokeRect(x, y, width, height);
+
+    ctx.fillStyle = textColor;
+    ctx.font = "20px monospace";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(text, x + width / 2, y + height / 2);
+
+    if (className) {
+        game.ui.buttonAreas.push({ x, y, width, height, className });
+    }
+}
+
+/* main function for rendering text and other elements on start/end/credit screens. */
 function gameScreenLines(overlayY, overlayHeight, lines, defaultColor = "white") {
-    const { tileSize } = game.settings; // Fetch tile size for consistency
-    const maxTextSize = 32; // Define max text size for regular text
+    const { tileSize } = game.settings;
+    const maxTextSize = 32;
 
     const fontSizes = {
         title: 56,
@@ -763,9 +800,13 @@ function gameScreenLines(overlayY, overlayHeight, lines, defaultColor = "white")
 
     ctx.fillStyle = defaultColor;
 
-    // Calculate total height of all lines
-    const totalTextHeight = lines.reduce((sum, [, style = "regular"]) => {
-        const fontSize = fontSizes[style] || fontSizes.regular;
+    // Calculate total height of all lines (images included)
+    const totalTextHeight = lines.reduce((sum, line) => {
+        const [, type = "regular", width = 400, height] = line;
+        if (type === "image") {
+            return sum + (height || Math.floor(width / 1.5)) + 10; // Default aspect ratio
+        }
+        const fontSize = fontSizes[type] || fontSizes.regular;
         return sum + fontSize + 10; // Add line height (font size + padding)
     }, 0);
 
@@ -776,56 +817,45 @@ function gameScreenLines(overlayY, overlayHeight, lines, defaultColor = "white")
     game.ui.buttonAreas = [];
 
     // Render each line
-    lines.forEach(([text, style = "regular", className]) => {
-        const fontSize = fontSizes[style] || fontSizes.regular;
-        ctx.font = `${fontSize}px monospace`;
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
+    lines.forEach(([content, type = "regular", param3, param4]) => {
+        const fontSize = fontSizes[type] || fontSizes.regular;
 
-        const textWidth = ctx.measureText(text).width;
-
-        if (style === "button") {
-            // Draw button background
-            const buttonPadding = 10;
-            const buttonWidth = textWidth + buttonPadding * 2;
-            const buttonHeight = fontSize + buttonPadding * 2;
-
+        if (type === "button") {
+            const buttonWidth = fontSize * 10; // Estimate button width
+            const buttonHeight = fontSize + 20;
             const buttonX = (canvas.width - buttonWidth) / 2;
             const buttonY = textY - buttonHeight / 2;
 
-            ctx.fillStyle = defaultColor; // Use defaultColor for button background
-            ctx.fillRect(buttonX, buttonY, buttonWidth, buttonHeight);
-
-            // Draw button text
-            ctx.fillStyle = "black"; // Button text color
-            ctx.fillText(text, canvas.width / 2, textY);
-
-            // Save button area for click detection
-            game.ui.buttonAreas.push({
-                x: buttonX,
-                y: buttonY,
-                width: buttonWidth,
-                height: buttonHeight,
-                className: className
-            });
-
-            ctx.fillStyle = defaultColor; // Reset to default color for next elements
+            // Render the button using gameScreenButton
+            gameScreenButton(content, buttonX, buttonY, buttonWidth, buttonHeight, defaultColor, "black", param3);
+        } else if (type === "image") {
+            // Render image using gameScreenImage
+            gameScreenImage(content, textY, param3, param4);
         } else {
-            // Draw regular text
-            ctx.fillText(text, canvas.width / 2, textY);
+            // Render regular text
+            ctx.font = `${fontSize}px monospace`;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillText(content, canvas.width / 2, textY);
         }
 
-        textY += fontSize + 10; // Move to the next line
+        // Update textY for the next element
+        textY += type === "image" ? (param4 || Math.floor(param3 / 1.5)) + 10 : fontSize + 10;
     });
 }
 
 function displayCredits(defaultCreditColor = "white") {
-    const { tileSize, gridWidth, gridHeight } = game.settings;
+    const { screenVisible, tileSize, gridWidth, gridHeight } = game.settings;
+    if (screenVisible != null ) {
+        console.log(`${screenVisible} screen in the way, skipping.`);
+        return;
+    }
+    game.screenVisible = "credits";
     const overlay = drawModalOverlay(50, 75, tileSize, gridWidth, gridHeight, "black");
     drawModalBorder("*", overlay.overlayStartX, overlay.overlayStartY, overlay.overlayGridWidth, overlay.overlayGridHeight, tileSize);
 
     const lines = [
-        ["FOREST", "title", "white"],
+        ["assets/img/forest-game-title.svg", 400, "image"],
         ["by", ],
         [""],
         ["== SAME TEAM ==", "subhead"],
@@ -843,8 +873,10 @@ function displayCredits(defaultCreditColor = "white") {
 
 // About screen displayed at the beginning of the game
 function displayAbout() {
-    const { tileSize, gridWidth, gridHeight } = game.settings;
+    if (!canDisplayScreen(SCREENS.ABOUT)) return;
 
+    const { tileSize, gridWidth, gridHeight } = game.settings;
+    
     // Clear the canvas
     eraseBoard();
     // Draw a sample game board
@@ -852,35 +884,41 @@ function displayAbout() {
     drawGameBoard();
     
     // Draw the modal overlay (50% width and height, centered)
-    const overlay = drawModalOverlay(50, 50, tileSize, gridWidth, gridHeight, "black");
+    const overlay = drawModalOverlay(50, 70, tileSize, gridWidth, gridHeight, "black", 0.6);
     
     // Draw the border around the modal
     drawModalBorder("*", overlay.overlayStartX, overlay.overlayStartY, overlay.overlayGridWidth, overlay.overlayGridHeight, tileSize);
     
-    // Define the About screen text and the Start Game button
+    // Define the About screen lines
     const lines = [
-        ["Forest", "title", "white"],
+        ["assets/img/forest-game-title.svg", "image", 400, 150], // Image with dimensions
         [""],
         ["Eliminate the orcs", "regular"],
         ["by guiding them into trees.", "regular"],
         [""],
-        ["Start Game", "button", "start-button"]
+        ["Start Game", "button", "start-button"] // Button with className
     ];
 
     // Render the lines within the modal overlay
     gameScreenLines(overlay.pixelY, overlay.pixelHeight, lines, "white");
-    console.log("displayAbout: End");
 }
 
 // Various game over screens displayed at the end of the game.
 function displayGameOver(reason, result = 0) {
+    if (!canDisplayScreen(SCREENS.GAME_OVER)) return;
     const { tileSize, gridWidth, gridHeight } = game.settings;
+
+
+    console.log("Entering displayGameOver");
+    console.log("Reason:", reason, "Result:", result);
 
     // Draw the modal overlay with transparency (e.g., 0.6 opacity)
     const overlay = drawModalOverlay(50, 50, tileSize, gridWidth, gridHeight, "black", 0.6);
 
     // Draw the border
     drawModalBorder("*", overlay.overlayStartX, overlay.overlayStartY, overlay.overlayGridWidth, overlay.overlayGridHeight, tileSize);
+
+    
 
     // Define the game over lines
     const resultMessage = result === 1 ? "YOU WIN!" : "GAME OVER";
@@ -896,16 +934,23 @@ function displayGameOver(reason, result = 0) {
 }
 
 function toggleCredits() {
-    // Toggle visibility
-    game.credits.visible = !game.credits.visible;
-    
-    if (game.credits.visible) {
-        displayCredits("green");
-        console.log("displayCredits toggled on.");
-    } else {
+    // Prevent toggling if another screen is visible
+    if (game.screenVisible !== SCREENS.NONE && game.screenVisible !== SCREENS.CREDITS) {
+        console.log("Another screen is visible; cannot toggle credits.");
+        return;
+    }
+
+    if (game.screenVisible === SCREENS.CREDITS) {
+        // Credits screen is currently visible; erase it
         eraseCredits();
-        console.log("displayCredits toggled off.");
+        console.log("Credits screen toggled off.");
+        game.screenVisible = SCREENS.NONE;
         drawGame();
+    } else {
+        // Credits screen is not visible; display it
+        displayCredits("green");
+        console.log("Credits screen toggled on.");
+        game.screenVisible = SCREENS.CREDITS;
     }
 }
 
