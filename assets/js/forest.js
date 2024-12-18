@@ -46,6 +46,12 @@ const SCREENS = {
     NONE: null,
 };
 
+const buttonActions = {
+    "start-button": restartGame,
+    "restart-button": restartGame,
+    "github-link": () => window.open("https://github.com/oxygensmith/forest", "_blank")
+};
+
 canvas.width = game.settings.gridWidth * game.settings.tileSize;
 canvas.height = game.settings.gridHeight * game.settings.tileSize;
 game.player = game.getInitialPlayerPosition();
@@ -73,8 +79,10 @@ const sounds = {
     playerDrown: new Audio('assets/sounds/player-drown.m4a'),
 };
 
+// Future function for when the grid size will be calculated 
+// automatically, using the initial viewport dimensions.
 function calculateGridSize() {
-    // for when grid adapts to the initial window size
+
     const { tileSize } = game.settings;
 
     // Get viewport dimensions
@@ -97,43 +105,54 @@ function calculateGridSize() {
 }
 
 function canDisplayScreen(screenName) {
+    if (game.debug) {
+        console.log("Current screen state:", game.screenVisible);
+    }
     if (game.screenVisible !== SCREENS.NONE) {
         console.log(`${game.screenVisible} screen in the way, skipping.`);
         return false;
     }
     game.screenVisible = screenName;
+    if (game.debug) {
+        console.log("New screen state:", game.screenVisible);
+    }
     return true;
 }
 
 function setupButtonListener() {
-    // Map of button class names to their corresponding actions
-    const buttonActions = {
-        "start-button": restartGame,
-        "restart-button": restartGame,
-        "github-link": () => window.open("https://github.com/oxygensmith/forest", "_blank")
-    };
-
     canvas.addEventListener("click", (event) => {
+        if (!game.ui.buttonCoords || game.screenVisible === SCREENS.NONE) return;
+
         const rect = canvas.getBoundingClientRect();
         const mouseX = event.clientX - rect.left;
         const mouseY = event.clientY - rect.top;
 
-        // Check each button area for a click
-        game.ui.buttonAreas.forEach(button => {
-            const { x, y, width, height, className } = button;
+        const { x, y, width, height, className } = game.ui.buttonCoords; // Use className from buttonCoords
 
-            if (
-                mouseX >= x &&
-                mouseX <= x + width &&
-                mouseY >= y &&
-                mouseY <= y + height
-            ) {
-                // If a matching action exists, trigger it
-                if (className && buttonActions[className]) {
-                    buttonActions[className]();
+        // Check if the click is within the button's bounds
+        if (
+            mouseX >= x &&
+            mouseX <= x + width &&
+            mouseY >= y &&
+            mouseY <= y + height
+        ) {
+            if (game.debug) {  
+                console.log("Clicked button class:", className);
+            }
+
+            // Use buttonActions to determine the corresponding function
+            if (buttonActions[className]) {
+                buttonActions[className](); // Execute the button's associated action
+            } else {
+                if (game.debug) {  
+                    console.warn(`No action defined for button: ${className}`);
                 }
             }
-        });
+
+            // Clear button state
+            game.ui.buttonCoords = null;
+            game.screenVisible = SCREENS.NONE;
+        }
     });
 }
 
@@ -661,27 +680,25 @@ function updateGame() {
 }
 
 function restartGame() {
-    const { gridWidth, gridHeight } = game.settings;
+    // Clear any lingering button state
+    game.ui.buttonCoords = null;
+    game.screenVisible = SCREENS.NONE;
 
-    // Reset game state
+    // Reset game state and start the game
     game.gameOver = false;
     game.score = 0;
     game.turns = 0;
-    game.paused = false; // Not yet in use
-    game.currentLevel = 1; // Not yet in use
-    game.screenVisible = null;
-
-    // calculateGridSize();
+    game.paused = false;
 
     // Generate the game board and entities
-    generateGameBoard(); // Populate the gameBoard array with static entities
-    generateEntities();  // Populate dynamic entities like orcs and player
+    generateGameBoard();
+    generateEntities();
 
-    // Reset player position to initial state
+    // Reset player position
     game.player = game.getInitialPlayerPosition();
 
     // Ensure the player's starting position is grass
-    game.gameBoard[game.player.y][game.player.x] = 'grass';
+    game.gameBoard[game.player.y][game.player.x] = "grass";
 
     // Redraw the entire game
     drawGame();
@@ -724,7 +741,9 @@ function drawModalOverlay(percentageWidth, percentageHeight, tileSize, gridWidth
 }
 
 function drawModalBorder(char = "*", startX, startY, gridWidth, gridHeight, tileSize, color = "white") {
-    console.log("drawModalBorder: Start", { startX, startY, gridWidth, gridHeight });
+    if (game.debug) {
+        console.log("drawModalBorder: Start", { startX, startY, gridWidth, gridHeight });
+    }    
     ctx.fillStyle = color;
     ctx.font = `${tileSize}px monospace`;
     ctx.textAlign = "center";
@@ -759,13 +778,16 @@ function gameScreenImage(url, yPosition, width = 400, height = null) {
         ctx.drawImage(img, xPosition, yPosition, width, height);
     };
 
+    // mandatory error display if image not found
     img.onerror = () => {
         console.error(`Failed to load image: ${url}`);
     };
 }
 
 function gameScreenButton(text, x, y, width, height, defaultColor = "white", textColor = "black", className = null) {
-    console.log("gameScreenButton: ", {text, x, y, width, height, defaultColor, textColor, className});
+    if (game.debug) {
+        console.log("gameScreenButton", { text, x, y, width, height, defaultColor, textColor, className });
+    }    
     ctx.fillStyle = defaultColor;
     ctx.fillRect(x, y, width, height);
 
@@ -778,9 +800,11 @@ function gameScreenButton(text, x, y, width, height, defaultColor = "white", tex
     ctx.textBaseline = "middle";
     ctx.fillText(text, x + width / 2, y + height / 2);
 
-    if (className) {
-        game.ui.buttonAreas.push({ x, y, width, height, className });
-    }
+    // Set button coordinates in the game object
+    game.ui.buttonCoords = { x, y, width, height, className };
+    if (game.debug) {
+        console.log("Button rendered:", game.ui.buttonCoords);
+    }    
 }
 
 /* main function for rendering text and other elements on start/end/credit screens. */
@@ -846,7 +870,9 @@ function gameScreenLines(overlayY, overlayHeight, lines, defaultColor = "white")
 function displayCredits(defaultCreditColor = "white") {
     const { screenVisible, tileSize, gridWidth, gridHeight } = game.settings;
     if (screenVisible != null ) {
-        console.log(`${screenVisible} screen in the way, skipping.`);
+        if (game.debug) {
+            console.log(`${screenVisible} screen in the way, skipping.`);
+        }    
         return;
     }
     game.screenVisible = "credits";
@@ -908,17 +934,16 @@ function displayGameOver(reason, result = 0) {
     if (!canDisplayScreen(SCREENS.GAME_OVER)) return;
     const { tileSize, gridWidth, gridHeight } = game.settings;
 
-
-    console.log("Entering displayGameOver");
-    console.log("Reason:", reason, "Result:", result);
+    if (game.debug) {
+        console.log("Entering displayGameOver");
+        console.log("Reason:", reason, "Result:", result);
+    }    
 
     // Draw the modal overlay with transparency (e.g., 0.6 opacity)
     const overlay = drawModalOverlay(50, 50, tileSize, gridWidth, gridHeight, "black", 0.6);
 
     // Draw the border
     drawModalBorder("*", overlay.overlayStartX, overlay.overlayStartY, overlay.overlayGridWidth, overlay.overlayGridHeight, tileSize);
-
-    
 
     // Define the game over lines
     const resultMessage = result === 1 ? "YOU WIN!" : "GAME OVER";
@@ -936,22 +961,53 @@ function displayGameOver(reason, result = 0) {
 function toggleCredits() {
     // Prevent toggling if another screen is visible
     if (game.screenVisible !== SCREENS.NONE && game.screenVisible !== SCREENS.CREDITS) {
-        console.log("Another screen is visible; cannot toggle credits.");
+        if (game.debug) {
+            console.log("Another screen is visible; cannot toggle credits.");
+        }    
         return;
     }
 
     if (game.screenVisible === SCREENS.CREDITS) {
         // Credits screen is currently visible; erase it
         eraseCredits();
-        console.log("Credits screen toggled off.");
+        if (game.debug) {
+            console.log("Credits screen toggled off.");
+        }    
         game.screenVisible = SCREENS.NONE;
         drawGame();
     } else {
         // Credits screen is not visible; display it
         displayCredits("green");
-        console.log("Credits screen toggled on.");
+        if (game.debug) {
+            console.log("Credits screen toggled on.");
+        }
         game.screenVisible = SCREENS.CREDITS;
     }
+}
+
+function restartGame() {
+    // Clear any lingering button state
+    game.ui.buttonCoords = null;
+    game.screenVisible = SCREENS.NONE;
+
+    // Reset game state and start the game
+    game.gameOver = false;
+    game.score = 0;
+    game.turns = 0;
+    game.paused = false;
+
+    // Generate the game board and entities
+    generateGameBoard();
+    generateEntities();
+
+    // Reset player position
+    game.player = game.getInitialPlayerPosition();
+
+    // Ensure the player's starting position is grass
+    game.gameBoard[game.player.y][game.player.x] = "grass";
+
+    // Redraw the entire game
+    drawGame();
 }
 
 window.onload = init;
