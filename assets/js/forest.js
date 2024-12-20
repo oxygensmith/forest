@@ -12,6 +12,7 @@ const game = {
         mountainMaxSize: 12,
         riverWidth: 3,
         orcScore: 10,
+        gameHasObjects: true
     },
     screenVisible: null,
     score: 0,
@@ -30,13 +31,14 @@ const game = {
         };
     },
     player: {},
+    objects: [],
     ui: { 
         titleOffset: -120,
         textOffset: -80,
         buttonOffset: +40,
         buttonCoords: null
     },
-    debug: false,
+    debug: true,
 };
 
 const SCREENS = {
@@ -61,7 +63,9 @@ game.gameBoard = Array.from({ length: game.settings.gridHeight }, () =>
     Array.from({ length: game.settings.gridWidth }, () => 'grass')
 );
 
-const entityTypes = {
+const entityTypes = [];
+
+const defaultEntityTypes = {
     grass: { char: '~', color: '#003300', passable: true },
     mountain: { char: 'M', color: 'gray', passable: false, kills: true },
     tree: { char: 'T', color: 'green', passable: false, kills: true },
@@ -71,6 +75,41 @@ const entityTypes = {
     dead: { char: 'D', color: 'red', passable: true },
     border: { char: 'X', color: 'red', passable: false, kills: true },
 };
+
+
+function initializeEntityTypes() {
+    // Add object types from availableObjects to entityTypes
+    availableObjects.forEach(object => {
+        entityTypes[object.type] = {
+            char: object.char,
+            color: object.color,
+            passable: true, // Objects are passable by default
+            kills: false    // Objects do not kill by default
+        };
+    });
+}
+
+function resetEntityTypes() {
+    Object.keys(defaultEntityTypes).forEach(key => {
+        entityTypes[key] = { ...defaultEntityTypes[key] }; // Deep copy of each entity
+    });
+}
+
+const availableObjects = [
+    { type: "swimFins", key: "river", char: "≈", color: "cyan" },
+    { type: "axe", key: "tree", char: "t", color: "brown" },
+    { type: "pickaxe", key: "mountain", char: "p", color: "gray" },
+    { type: "sword", key: "orc", char: "/", color: "silver" }
+];
+
+availableObjects.forEach(object => {
+    entityTypes[object.type] = {
+        char: object.char,
+        color: object.color,
+        passable: true,
+        kills: false, // Objects should not kill the player by default
+    };
+});
 
 const sounds = {
     move: new Audio('assets/sounds/move.m4a'),
@@ -185,6 +224,9 @@ function setupKeyboardControls() {
 
 function init() {
     
+    // Initialize entity types, including objects
+    initializeEntityTypes();
+
     // Calculate grid dimensions based on viewport
     // calculateGridSize();
 
@@ -212,6 +254,7 @@ function eraseBoard() {
 }
 
 function eraseCredits() {
+    // TODO: refactor into a more generic clearScreen function
     const { tileSize, gridWidth, gridHeight } = game.settings;
 
     // Calculate overlay dimensions based on the grid
@@ -258,6 +301,35 @@ function addTreesToBoard(treeCount) {
     }
 }
 
+function generateObjects() {
+    if (!game.settings.gameHasObjects) {
+        console.log("Objects generation is disabled.");
+        return;
+    }    
+    if (game.debug) {
+        console.log("Generating objects...");
+    }
+    
+    const { gridWidth, gridHeight } = game.settings;
+
+    availableObjects.forEach(objectType => {
+        let x, y;
+        do {
+            x = Math.floor(Math.random() * gridWidth);
+            y = Math.floor(Math.random() * gridHeight);
+        } while (
+            game.gameBoard[y][x] !== "grass" || // Ensure the tile is grass
+            (Math.abs(x - game.player.x) <= 1 && Math.abs(y - game.player.y) <= 1) // Avoid placing near the player
+        );
+
+        // Place the object on the game board
+        game.gameBoard[y][x] = objectType;
+
+        // Track the object in the objects array
+        game.objects.push({ type: objectType, x, y });
+    });
+}
+
 function generateGameBoard() {
     const { gridWidth, gridHeight, numberOfTrees, numberOfMountains, mountainMaxSize, riverWidth } = game.settings;
     const gameplayGridHeight = gridHeight - 1; // Reserve the first row for game details
@@ -277,6 +349,7 @@ function generateGameBoard() {
     generateMountainBlobs(numberOfMountains, mountainMaxSize);
     generateRiver(riverWidth);
     addTreesToBoard(numberOfTrees);
+    generateObjects(); 
 }
 
 function generateEntities() {
@@ -520,6 +593,17 @@ function movePlayer(dx, dy) {
         return; // Stop further movement
     }
 
+    // Check for object pickup
+    if (game.settings.gameHasObjects) {
+        const objectIndex = game.objects.findIndex(obj => obj.x === newX && obj.y === newY);
+        if (objectIndex !== -1) {
+            const object = game.objects[objectIndex];
+            applyObjectEffect(object); // Apply the object's effect
+            game.objects.splice(objectIndex, 1); // Remove the object from the game
+            game.gameBoard[newY][newX] = "grass"; // Replace with grass
+        }
+    }
+
     // Move player to new position
     player.x = newX;
     player.y = newY;
@@ -596,6 +680,30 @@ function handlePlayerDeath(player, newX, newY, causeKey, customReason = null) {
 function drawPermanentD(x, y) {
     clearTile(x, y); // Clear the tile with a black background
     drawEntity('dead', x, y); // Use the correct entity key
+}
+
+function applyObjectEffect(object) {
+    console.log(`Picked up: ${object.type}`);
+
+    switch (object.type) {
+        case "swimFins":
+            entityTypes.river.kills = false;
+            entityTypes.river.passable = true;
+            break;
+        case "axe":
+            entityTypes.tree.kills = false;
+            entityTypes.tree.passable = true;
+            break;
+        case "pickaxe":
+            entityTypes.mountain.kills = false;
+            entityTypes.mountain.passable = true;
+            break;
+        case "sword":
+            entityTypes.orc.kills = true; // Orcs die on collision
+            break;
+        default:
+            console.warn(`Unknown object type: ${object.type}`);
+    }
 }
 
 /* DRAW functions */
@@ -709,6 +817,9 @@ function updateGame() {
 }
 
 function restartGame() {
+    // Re-initialize entity types, including objects
+    initializeEntityTypes();
+
     // Clear any lingering button state
     game.ui.buttonCoords = null;
     game.screenVisible = SCREENS.NONE;
@@ -1028,6 +1139,12 @@ function restartGame() {
     // Generate the game board and entities
     generateGameBoard();
     generateEntities();
+
+    resetEntityTypes();
+
+    if (game.settings.gameHasObjects) {
+        generateObjects(); // Generate objects if enabled
+    }
 
     // Reset player position
     game.player = game.getInitialPlayerPosition();
